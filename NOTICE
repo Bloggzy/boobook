@@ -1,0 +1,31 @@
+Boobook
+Copyright 2026 The Boobook Authors
+
+This product is licensed under the Apache License, Version 2.0. See LICENSE.
+
+Boobook is an investigative aid. It reports what artefacts on a Windows system
+record. It does not establish what a person did, and no output of it should be
+presented as a conclusion without an examiner's own analysis of the cited
+sources.
+
+---
+
+THIRD-PARTY COMPONENTS
+
+A compiled Boobook binary statically links third-party libraries that remain
+under their own licences, which this notice neither replaces nor restricts. A
+distributed binary must carry their notices too.
+
+Every one of them is listed, with its licence text, in THIRD-PARTY-NOTICES.md.
+All are permissive — MIT, Apache-2.0, BSD, ISC — apart from one file-scoped
+copyleft licence, MPL-2.0.
+
+The principal components are the embedded DuckDB database
+(github.com/duckdb/duckdb-go, MIT), the Windows event log and registry hive
+parsers (www.velocidex.com/golang/evtx and .../regparser, Apache-2.0) and the
+compound file parsers behind jump list reading (github.com/richardlehane/mscfb
+and .../msoleps, Apache-2.0).
+
+Regenerate THIRD-PARTY-NOTICES.md whenever the dependency set changes; the list
+is the modules reachable from `go list -deps ./cmd/boobook`, not the whole
+go.mod graph.

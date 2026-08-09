@@ -1,0 +1,624 @@
+/* The report's whole appearance. It is embedded in the binary and inlined into
+   the document: an examiner opens a report on a machine with no network, often
+   long after the run, and a page that needs a stylesheet fetched is a page that
+   will one day render as unformatted text. */
+
+:root {
+    --ink: #16191d;
+    --ink-soft: #4c545e;
+    --ink-faint: #767f8a;
+    --rule: #dde1e6;
+    --page: #ffffff;
+    --panel: #f6f7f9;
+    --tier1: #a4262c;
+    --tier2: #8a6116;
+    --tier3: #5a6470;
+    --accent: #17506b;
+    --review: #a4262c;
+    /* The selected filter chip. Named rather than inlined because the rules
+       that apply it are generated one per chip. */
+    --chip-on: #17506b;
+    --chip-on-ink: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ink: #e8eaed;
+        --ink-soft: #b3bac2;
+        --ink-faint: #8a929c;
+        --rule: #333940;
+        --page: #16191d;
+        --panel: #1e2228;
+        --tier1: #f1707a;
+        --tier2: #e0b061;
+        --tier3: #9aa4b0;
+        --accent: #6fb6d8;
+        --review: #f1707a;
+        --chip-on: #6fb6d8;
+        --chip-on-ink: #16191d;
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    padding: 0 1.5rem 5rem;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+main { max-width: 60rem; margin: 0 auto; }
+
+h1, h2, h3 { line-height: 1.25; font-weight: 600; }
+h1 { font-size: 1.65rem; margin: 0 0 .25rem; }
+h2 {
+    font-size: 1.2rem;
+    margin: 3rem 0 .25rem;
+    padding-bottom: .4rem;
+    border-bottom: 2px solid var(--rule);
+}
+h3 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+
+a { color: var(--accent); }
+
+header.masthead {
+    padding: 2rem 0 1rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+.subtitle { color: var(--ink-soft); margin: 0; }
+
+/* The provenance strip. It is at the top rather than in an appendix because a
+   report is worth exactly what its chain of custody is worth. */
+.provenance {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: .75rem 1.5rem;
+    margin: 1.25rem 0 0;
+    padding: .9rem 1rem;
+    background: var(--panel);
+    border-radius: 5px;
+    font-size: .85rem;
+}
+.provenance dt {
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .7rem;
+    margin: 0 0 .1rem;
+}
+.provenance dd { margin: 0; word-break: break-word; }
+
+/* At a glance. The counts are large because they are the answer to "how much
+   of this is there", and the findings below them are the answer to "what". */
+.counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+    gap: 1rem;
+    margin: 1.25rem 0;
+}
+.count { border-left: 3px solid var(--rule); padding-left: .75rem; }
+.count .value { font-size: 1.7rem; font-weight: 600; letter-spacing: -.02em; }
+.count .label { color: var(--ink-soft); font-size: .8rem; }
+.count.tier1 { border-left-color: var(--tier1); }
+.count.tier2 { border-left-color: var(--tier2); }
+.count.review { border-left-color: var(--review); }
+
+.findings { list-style: none; margin: 1.5rem 0 0; padding: 0; }
+.finding {
+    padding: .85rem 0 .85rem 1rem;
+    border-left: 3px solid var(--rule);
+    margin-bottom: .6rem;
+}
+.finding.offensive { border-left-color: var(--tier1); }
+.finding.storage, .finding.mobile { border-left-color: var(--tier2); }
+.finding .headline { font-weight: 600; }
+.finding .detail { color: var(--ink-soft); font-size: .9rem; margin-top: .2rem; }
+/* One device per row. Four run together into a paragraph have to be read
+   before they can be counted, and the headline above has already counted
+   them. */
+.detail-list {
+    list-style: none;
+    margin: .35rem 0 0;
+    padding: 0;
+    color: var(--ink-soft);
+    font-size: .9rem;
+}
+.detail-list > li {
+    padding: .15rem 0 .15rem .75rem;
+    border-left: 1px solid var(--rule);
+}
+.finding .basis {
+    color: var(--ink-faint);
+    font-size: .75rem;
+    margin-top: .35rem;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+/* A citation that opens the file it names. The link is relative, so the report
+   and its data directory move together, and only files the manifest records as
+   written are ever linked. */
+a.cite { color: inherit; text-decoration-color: var(--ink-faint); }
+a.cite:hover { color: var(--accent); }
+
+/* ---- disclosures --------------------------------------------------------- */
+
+/* A checkbox and a label, not a details element, because a closed one cannot be
+   forced open by any stylesheet: printing one would drop a whole section off
+   the paper with nothing to say it had gone. The rule that hides the body is
+   overridden for print below, and with no CSS at all everything is visible,
+   which is the direction a fold has to fail in. */
+.disclose { margin: 1rem 0; }
+.disclose-toggle {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    /* Not display:none — the control has to stay focusable from a keyboard. */
+}
+.disclose-label {
+    display: block;
+    cursor: pointer;
+    padding: .5rem .75rem;
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--panel);
+}
+.disclose-label::before { content: "\25B8"; margin-right: .5rem; color: var(--ink-faint); }
+.disclose-toggle:checked ~ .disclose-label::before { content: "\25BE"; }
+.disclose-toggle:focus-visible ~ .disclose-label { outline: 2px solid var(--accent); }
+.disclose-title { font-weight: 600; font-size: .9rem; }
+.disclose-body { display: none; }
+.disclose-toggle:checked ~ .disclose-body { display: block; }
+
+/* The names of what is inside, outside the fold. A section reading "7 devices"
+   says nothing about whether it is worth opening.
+
+   They go the moment the section is open, because the filter bar inside names
+   the same devices and does something when pressed. Reported by an examiner
+   looking at two rows of the same names an inch apart: the upper row is the one
+   that only looks like a control, so it is the one to withdraw — but only where
+   the lower one has arrived. Collapsed, these are still the only names on the
+   page and still the reason a reader can dismiss the section without opening
+   it. */
+.disclose-names { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
+.disclose-toggle:checked ~ .disclose-label .disclose-names { display: none; }
+.name-chip {
+    font-size: .75rem;
+    color: var(--ink-soft);
+    background: var(--page);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: .1rem .55rem;
+}
+.disclose.tier1 > .disclose-label { border-left: 3px solid var(--tier1); }
+.disclose.tier2 > .disclose-label { border-left: 3px solid var(--tier2); }
+
+/* Device cards. The unit of the report is the physical device, so the card is
+   the unit of the page: everything about one device is inside one border. */
+.card {
+    border: 1px solid var(--rule);
+    border-left-width: 4px;
+    border-radius: 5px;
+    padding: 1rem 1.15rem;
+    margin: 1.25rem 0;
+}
+.card.tier1 { border-left-color: var(--tier1); }
+.card.tier2 { border-left-color: var(--tier2); }
+.card.tier3 { border-left-color: var(--tier3); }
+
+.card-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+.card-head h3 { margin: 0; font-size: 1.05rem; }
+.card-sub { color: var(--ink-faint); font-size: .78rem; word-break: break-all; }
+
+.badges { display: flex; flex-wrap: wrap; gap: .35rem; }
+.badge {
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    border: 1px solid var(--rule);
+    color: var(--ink-soft);
+    white-space: nowrap;
+}
+.badge.tier1 { border-color: var(--tier1); color: var(--tier1); }
+.badge.tier2 { border-color: var(--tier2); color: var(--tier2); }
+.badge.review { border-color: var(--review); color: var(--review); }
+
+.card-review {
+    margin: .75rem 0 0;
+    padding: .5rem .7rem;
+    border-left: 3px solid var(--review);
+    background: var(--panel);
+    font-size: .85rem;
+}
+
+.card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin: .9rem 0;
+    padding: .6rem 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+}
+.stat { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-label { color: var(--ink-soft); font-size: .8rem; margin-left: .3rem; }
+
+.card-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: .6rem 1.5rem;
+    margin: 0 0 .9rem;
+    font-size: .875rem;
+}
+.card-facts dt {
+    color: var(--ink-faint);
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.card-facts dd { margin: 0; word-break: break-word; }
+.card-facts dd.absent { color: var(--ink-soft); font-style: italic; }
+
+.card-why { font-size: .85rem; color: var(--ink-soft); margin: 0 0 .6rem; }
+
+.confidence { font-weight: 600; }
+.confidence.confirmed { color: #1d7a4c; }
+.confidence.strong { color: #1d7a4c; }
+.confidence.probable { color: var(--tier2); }
+.confidence.possible, .confidence.unattributed { color: var(--ink-faint); }
+
+/* The folds inside a card. Same mechanism as the tiers above — there is no
+   details element anywhere in this document — but a lighter face, since a card
+   holding four boxed panels reads as four sections rather than as one device.
+   The print rules at the bottom open these too, since they match .disclose. */
+.disclose.fold { margin: .5rem 0 0; font-size: .85rem; }
+.disclose.fold > .disclose-label {
+    padding: .2rem 0;
+    border: none;
+    background: none;
+    border-radius: 0;
+}
+.disclose.fold > .disclose-label .disclose-title {
+    color: var(--accent);
+    font-size: .82rem;
+    font-weight: 400;
+}
+.disclose.fold > .disclose-toggle:checked ~ .disclose-body { margin-top: .4rem; }
+
+.identities { margin: 0; padding-left: 1.1rem; font-size: .8rem; }
+.identities li { word-break: break-all; margin-bottom: .15rem; }
+
+.source { font-size: .75rem; }
+.faint { color: var(--ink-faint); }
+.wrap { word-break: break-all; }
+.disputed { color: var(--tier2); font-size: .72rem; margin-top: .15rem; }
+
+table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+th, td {
+    text-align: left;
+    padding: .4rem .6rem .4rem 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+}
+th { color: var(--ink-faint); font-weight: 600; font-size: .78rem;
+     text-transform: uppercase; letter-spacing: .04em; }
+td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
+.table-scroll { overflow-x: auto; }
+
+.severity {
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 600;
+}
+.severity.failed, .severity.malformed { color: var(--tier1); }
+.severity.absent, .severity.truncated, .severity.partial { color: var(--tier2); }
+
+/* ---- the timeline ------------------------------------------------------- */
+
+.timeline { margin-top: 1rem; }
+
+/* The radios drive the filter and are never seen. They stay in the flow and
+   keep their size so the keyboard can still reach them: display:none would take
+   the filter away from anyone not using a mouse. */
+.filter-radio {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+/* One bar, used by the timeline, each tier and the file activity. It was three
+   different things: a working filter on the timeline and, elsewhere, the same
+   row of names inside a fold's label, where pressing one opened the section
+   instead of narrowing it. */
+.filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    /* The top margin is not decoration. The bar sits immediately below the
+       fold's label, which is a bordered panel, and with no gap the first pill
+       reads as part of that panel's edge — which is the confusion this whole
+       change was about. 1rem rather than something smaller because the
+       timeline's bar sits inside a wrapper carrying that margin already, and a
+       bar that stands 10px clear in one section and 16px in the next is the
+       same inconsistency at a smaller scale. */
+    margin: 1rem 0;
+}
+.filter-chips label {
+    --chip-face: var(--panel);
+    --chip-ink: var(--ink-soft);
+    background: var(--chip-face);
+    color: var(--chip-ink);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: .25rem .7rem;
+    font-size: .8rem;
+    cursor: pointer;
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.filter-radio:focus-visible + .filter-chips label,
+.filter-chips label:hover { border-color: var(--accent); }
+.chip-count { color: inherit; opacity: .7; font-variant-numeric: tabular-nums; }
+
+.timeline-entries {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+}
+.entry {
+    display: grid;
+    /* Wide enough for the longest time column a row can hold: the id, a full
+       timestamp, and the local->UTC badge that only a converted wall clock
+       carries. Sized short of that, the badge overflowed the track and sat on
+       top of the category chip beside it. */
+    grid-template-columns: 17.5rem 1fr;
+    gap: .25rem 1rem;
+    padding: .5rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+.entry-when {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .4rem;
+    font-size: .82rem;
+    min-width: 0;
+}
+.entry-when > * { white-space: nowrap; }
+.entry-id { font-size: .7rem; min-width: 2.5rem; text-align: right; }
+
+/* A converted wall clock and a recorded instant must never look alike at a
+   glance. The unit beside every time is the whole point of the column. */
+.unit {
+    font-size: .65rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: .05rem .3rem;
+    border-radius: 3px;
+    border: 1px solid var(--rule);
+}
+.unit.recorded { color: var(--ink-faint); }
+.unit.converted {
+    color: var(--tier2);
+    border-color: var(--tier2);
+    font-weight: 600;
+}
+/* A record that carries no usable time. It says so in the column where every
+   other row carries an instant, rather than leaving a blank that reads as an
+   oversight. */
+.unit.absent {
+    color: var(--ink-faint);
+    border-style: dashed;
+}
+/* A date that is a storage format's zero. It is marked more loudly than an
+   absent time, not less: the row does carry a date, it looks like a real one,
+   and the reader has to be stopped from treating it as one. */
+.unit.epoch {
+    color: var(--tier1);
+    border-color: var(--tier1);
+    border-style: dashed;
+    font-weight: 600;
+}
+
+/* A grid track's automatic minimum is its content, so a single unbreakable
+   token in the body widened the 1fr column past the page and gave the whole
+   report a horizontal scrollbar — every section, not just the row at fault.
+   The culprits are real and unavoidable: route names like
+   drive_letter_mounted_devices_device_path, and kernel device paths that
+   contain no spaces at all. */
+.entry-body { min-width: 0; }
+.entry-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .4rem;
+}
+.entry-head > * { min-width: 0; overflow-wrap: anywhere; }
+.entry-label { font-weight: 600; word-break: break-word; }
+.entry .event { font-size: .82rem; color: var(--ink-soft); }
+.entry-means { color: var(--ink-soft); font-size: .8rem; margin-top: .15rem; }
+.entry-basis {
+    color: var(--tier2);
+    font-size: .78rem;
+    margin-top: .15rem;
+}
+/* Two lines: what the record is, then the file it was read from. Run together
+   on one line they became an unbroken string the eye had to parse before it
+   could find either, which is what a timeline row can least afford. */
+.entry-source { font-size: .72rem; margin-top: .2rem; word-break: break-all; }
+.entry-source > div + div { margin-top: .1rem; }
+.entry-source .absent { font-style: italic; }
+
+.chip {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ink-faint);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: .05rem .35rem;
+}
+.chip.cat-connection { color: var(--tier1); border-color: var(--tier1); }
+.chip.cat-file { color: var(--accent); border-color: var(--accent); }
+.chip.cat-install, .chip.cat-disk { color: var(--tier2); border-color: var(--tier2); }
+.chip.letter { color: var(--accent); border-color: var(--accent); }
+
+.print-only { display: none; }
+
+@media (max-width: 44rem) {
+    .entry { grid-template-columns: 1fr; }
+    .entry-when { justify-content: flex-start; }
+    .entry-id { text-align: left; min-width: 0; }
+}
+
+.note {
+    color: var(--ink-soft);
+    font-size: .875rem;
+    margin: .75rem 0 0;
+}
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+
+.empty {
+    color: var(--ink-soft);
+    font-style: italic;
+    padding: .75rem 0;
+}
+
+footer {
+    margin-top: 4rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-faint);
+    font-size: .8rem;
+}
+
+@media print {
+    body { padding: 0; color: #000; background: #fff; }
+    h2 { break-after: avoid; }
+    /* .run joined these when the executions stopped being table rows: a
+       programme split across a page break loses the tie between its name and
+       the files it read. */
+    .finding, tr, .run { break-inside: avoid; }
+
+    /* Print ignores the filter. A printed report that silently omitted the
+       rows a reader had filtered out would be a report that lies by omission,
+       and nothing on the paper would say so.
+
+       Nothing here has to undo the filter, and that is the point. The generated
+       rules are inside @media screen, so they never apply on paper. They used to
+       apply everywhere and be undone by a rule naming the element being hidden
+       — display:grid for a timeline entry — which meant every new filtered
+       element needed somebody to remember to add its own override here, with
+       the failure invisible until a populated report was printed. */
+    .timeline-entries > .entry { break-inside: avoid; }
+    .filter-chips { display: none; }
+    .print-only { display: block; }
+
+    /* Every fold is opened for print, for the same reason. What is on the paper
+       is the whole report, and the label that offered to expand a section is
+       meaningless there. */
+    .disclose-body { display: block !important; }
+    .disclose-label { background: none; border: none; padding: 0; }
+    .disclose-label::before { content: ""; }
+    .disclose-names { display: none; }
+}
+
+/* ---- file activity ------------------------------------------------------ */
+
+.card.files { border-left-color: var(--rule); }
+.card.files .card-head { margin-bottom: .75rem; }
+/* File records reuse the timeline's row shape. Four columns of table put a
+   sentence of reasoning into a two-inch column and stood it on end. */
+.file-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.reason { color: var(--ink-soft); margin-top: .2rem; }
+.gaps { margin-top: 1.5rem; }
+
+/* ---- programmes and the devices they touched ---------------------------- */
+
+/* The same defect as the one noted above the file list, found a second time by
+   an examiner reading a real report: five columns of table, every cell holding
+   a paragraph, a file list or a sentence. A prefetch record names up to eight
+   files by device path, so that column wrapped to twenty lines while the one
+   beside it wrapped to one, and the programme the whole row is about was the
+   narrowest thing on the screen.
+
+   Nothing here lines up down a column, which is what a table is for. One
+   programme per block, its facts labelled beneath it, and the long content gets
+   the width of the page. */
+.run-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.run { padding: .75rem 0; border-bottom: 1px solid var(--rule); }
+.run-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .75rem;
+    align-items: baseline;
+    justify-content: space-between;
+}
+.run-name { font-size: .95rem; font-weight: 600; }
+
+.run-facts { margin: .5rem 0 0; font-size: .85rem; }
+.run-facts > div {
+    display: grid;
+    /* A label column wide enough for "Read from this device" on one line. It
+       is the longest of the four, and wrapped labels put the eye back where the
+       table had it. */
+    grid-template-columns: 12.5rem 1fr;
+    gap: .15rem 1rem;
+    padding: .3rem 0;
+}
+.run-facts > div + div { border-top: 1px dotted var(--rule); }
+.run-facts dt {
+    color: var(--ink-faint);
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding-top: .12rem;
+}
+/* min-width:0 or a long unbroken device path forces the grid track wider than
+   the page and the whole card scrolls sideways. */
+.run-facts dd { margin: 0; min-width: 0; word-break: break-word; }
+.run-values { list-style: none; margin: 0; padding: 0; }
+.run-values li { font-variant-numeric: tabular-nums; }
+.run-facts .absent { color: var(--ink-soft); font-style: italic; }
+
+@media (max-width: 44rem) {
+    .run-facts > div { grid-template-columns: 1fr; }
+}
+
+/* ---- tier 3 ------------------------------------------------------------- */
+
+.review-list { margin: 1.25rem 0 1.75rem; }
+.review-list h3 { margin-top: 0; }
+.finding.review { border-left-color: var(--review); }
+.finding.review .headline .badge { margin-left: .4rem; font-weight: 500; }
+.badge.tier3 { border-color: var(--tier3); color: var(--tier3); }
+
+.other-group {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--tier3);
+    border-radius: 4px;
+    padding: .5rem .8rem;
+    margin-bottom: .5rem;
+}
+.other-group > .disclose-label .disclose-title {
+    color: var(--ink);
+    font-size: .875rem;
+    font-weight: 600;
+}
+.other-group table { font-size: .8rem; }

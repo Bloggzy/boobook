@@ -1,0 +1,15 @@
+# Build output
+/bin/
+/dist/
+*.exe
+
+# Case output — never commit evidence or derived case data
+*.duckdb
+*.duckdb.wal
+/output/
+/working/
+
+# Working notes, deliberately not published
+AGENTS.md
+CLAUDE.md
+FINDINGS.md

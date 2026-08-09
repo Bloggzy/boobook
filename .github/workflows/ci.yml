@@ -1,0 +1,114 @@
+# The checks the README asks for before a commit, run on every push.
+#
+# Windows, because that is the only platform this tool is built for and the one
+# the path handling, the drive letters and the icon resource are written
+# against. A green run on Linux would say very little about it.
+#
+# There is no evidence in this repository and there cannot be, so the run-level
+# check is over the tree internal/fixture builds. See cmd/boobook/smoke_test.go
+# for what that is and what it deliberately leaves out.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second push supersedes the first: the store and report packages build a
+  # real DuckDB per test and take the better part of ten minutes each, so queued
+  # runs of a branch nobody is looking at any more are worth cancelling.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    # The two DuckDB-backed packages dominate this and a slow runner can take
+    # roughly twice as long as a fast one for the same work, so the headroom is
+    # deliberate: a job killed at the cap tells you nothing about why.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # From go.mod, so the version cannot drift from what the module
+          # declares.
+          go-version-file: go.mod
+          cache: true
+
+      # cgo is not optional here: DuckDB is a C library and the whole store
+      # layer is behind it. Stating it makes a toolchain that quietly disabled
+      # it fail loudly rather than fail to build.
+      - name: Check cgo is available
+        run: |
+          go env CGO_ENABLED
+          if ((go env CGO_ENABLED) -ne "1") { throw "cgo is disabled; the DuckDB store cannot build" }
+
+      # gofmt first, because it is the cheapest and the most likely to be
+      # forgotten. -l prints the files that need formatting and exits zero, so
+      # the output has to be tested rather than the status.
+      - name: gofmt
+        run: |
+          $unformatted = gofmt -l ./cmd ./internal ./tools
+          if ($unformatted) {
+            Write-Host "These files are not gofmt'd:"
+            Write-Host $unformatted
+            exit 1
+          }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # The unit tests and the end-to-end smoke test in one pass. The store and
+      # report packages build an actual DuckDB case per test rather than mocking
+      # one — slow, and deliberate: a mocked store would test the mock.
+      #
+      # -timeout is explicit because Go's default is ten minutes *per package*
+      # and those two packages are now well inside that on a fast runner and
+      # outside it on a slow one. They took 481 s and 384 s on the runner that
+      # last passed, and the run that first hit this had cmd/boobook at 235 s
+      # against that run's 123 s — the same work on a machine going at roughly
+      # half the speed, which puts store at about fifteen minutes. Both packages
+      # died at exactly 10m0s with a test that had been running for nine
+      # seconds, which is the signature of the package clock rather than a hang.
+      #
+      # Twenty minutes is about twice the slowest observed store run. The job
+      # timeout below is the real backstop; this bound exists so that a genuine
+      # hang still fails in a readable way rather than sitting until the job is
+      # killed.
+      - name: Test
+        run: go test -timeout 20m ./...
+
+      # Separately and with the race detector, over the packages that run work
+      # in parallel. Event log parsing hands chunk ranges of one file to several
+      # goroutines, each with its own handle, and a regression there would
+      # corrupt evidence rather than crash.
+      - name: Test under the race detector
+        run: go test -timeout 20m -race ./internal/eventlog/ ./internal/progress/
+
+      # The release build, so a linker flag that only breaks the stripped binary
+      # is caught here rather than at release time. The binary is not published
+      # from CI: a release is built and hashed by hand, because the hash on the
+      # release page has to be of the file actually uploaded.
+      - name: Release build
+        run: |
+          $hash = "$(git rev-parse --short HEAD)"
+          go build -trimpath -ldflags "-s -w -X github.com/Bloggzy/boobook/internal/workspace.BuildHash=$hash" -o boobook.exe ./cmd/boobook
+          ./boobook.exe -sources | Select-Object -First 14
+
+      # The capability catalogue is derived from the code, so this cannot print
+      # a stale list — but it can fail to render, and a run that never asked
+      # would not know.
+      - name: Print the selection catalogue
+        run: ./boobook.exe -rules | Select-Object -First 20

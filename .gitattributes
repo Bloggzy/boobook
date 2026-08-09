@@ -1,0 +1,39 @@
+# Line endings, declared rather than left to whatever each machine has
+# configured.
+#
+# This is not tidiness. GitHub's windows-latest runners check out with
+# core.autocrlf=true, so a repository that says nothing gets CRLF in the working
+# tree — and `gofmt -l` reports every CRLF file as needing formatting, because
+# gofmt only ever writes LF. The first CI run on this repository failed for that
+# reason and only that reason: all 66 Go files flagged, on a tree that is
+# silent under gofmt on the machine it was written on.
+#
+# Declaring eol=lf makes the checkout the same everywhere and takes the local
+# core.autocrlf setting out of the question. It also settles the same hazard for
+# views.sql, which is read and searched by tests: a check for ";\n" finds
+# nothing in a file checked out as ";\r\n", which is a defect that has already
+# been hit once here.
+
+# Everything git recognises as text is normalised to LF in the repository.
+* text=auto eol=lf
+
+# The formats where the ending is not cosmetic.
+*.go   text eol=lf
+*.sql  text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.txt  text eol=lf
+
+# Binary, so git never rewrites a byte of them. The .syso is a COFF object the
+# linker consumes and the icon is its payload; a line-ending conversion inside
+# either would corrupt the executable's resources in a way that builds cleanly
+# and only shows up as a missing icon.
+*.png  binary
+*.ico  binary
+*.syso binary
+*.exe  binary
+*.duckdb binary
+*.pf   binary
+*.evtx binary

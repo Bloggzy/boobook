@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boobook — USB device report{{with .Manifest.Case.Reference}} — {{.}}{{end}}</title>
+<style>{{.Style}}</style>
+</head>
+<body>
+<main>
+
+<header class="masthead">
+  <h1>USB device report{{with .Manifest.Case.HostLabel}} — {{.}}{{end}}</h1>
+  <p class="subtitle">
+    Every time on this page is UTC, to the second, truncated. Full precision is
+    in the data files beside it. Every source file is named relative to the
+    evidence root below, so a path reads as the artefact it is rather than as
+    wherever the evidence happened to be mounted; the absolute paths are in
+    <span class="mono">provenance/sources.csv</span> and the manifest, with each
+    file's SHA-256 as this run read it.
+  </p>
+
+  <!-- Provenance leads rather than trailing. A report is worth what its chain
+       of custody is worth, and burying that in an appendix invites it to be
+       skipped. -->
+  <dl class="provenance">
+    {{with .Manifest.Case.Reference}}<div><dt>Case</dt><dd>{{.}}</dd></div>{{end}}
+    {{with .Manifest.Case.Examiner}}<div><dt>Examiner</dt><dd>{{.}}</dd></div>{{end}}
+    <div><dt>Evidence</dt><dd class="mono">{{.Manifest.Evidence.Root}}</dd></div>
+    <div><dt>Layout</dt><dd>{{.Manifest.Evidence.Layout}}</dd></div>
+    <div><dt>Run</dt><dd class="mono">{{.Manifest.Run.ID}}</dd></div>
+    <div><dt>Read at</dt><dd>{{instant .Manifest.Run.StartedAt}}</dd></div>
+    <div><dt>Tool</dt><dd>{{.Manifest.Tool.Name}} {{.Manifest.Tool.Version}}{{with .Manifest.Tool.BuildHash}} ({{.}}){{end}}</dd></div>
+    <div><dt>Rule set</dt><dd>{{.Manifest.Classification.RuleSetVersion}}, profile {{.Manifest.Classification.Profile}}</dd></div>
+  </dl>
+  {{with .Manifest.Case.Notes}}<p class="note">{{.}}</p>{{end}}
+  <p class="print-only note">
+    Printed with every collapsible section expanded and the timeline's device
+    filter ignored: everything this report holds is on the paper.
+  </p>
+</header>
+
+<h2 id="at-a-glance">Summary: At a glance</h2>
+
+<div class="counts">
+  <div class="count"><div class="value">{{.Summary.Devices}}</div>
+    <div class="label">physical {{plural .Summary.Devices "device" "devices"}}, from {{.Summary.Identities}} {{plural .Summary.Identities "identity" "identities"}}</div></div>
+  <!-- "tier 1" alone is a number beside a word the reader has not met yet.
+       Saying what is being counted makes the tile readable on its own. -->
+  <div class="count tier1"><div class="value">{{.Summary.Tier1}}</div>
+    <div class="label">tier 1 {{plural .Summary.Tier1 "device" "devices"}}, high value</div></div>
+  <div class="count tier2"><div class="value">{{.Summary.Tier2}}</div>
+    <div class="label">tier 2 {{plural .Summary.Tier2 "device" "devices"}}, medium value</div></div>
+  <div class="count review"><div class="value">{{.Summary.ReviewRequired}}</div>
+    <div class="label">flagged for review</div></div>
+  <div class="count"><div class="value">{{.Summary.FileRecords}}</div>
+    <div class="label">file {{plural .Summary.FileRecords "record" "records"}}, {{.Summary.AttributedRecords}} reaching a device</div></div>
+  <div class="count"><div class="value">{{.Summary.Connections}}</div>
+    <div class="label">connection {{plural .Summary.Connections "window" "windows"}}</div></div>
+</div>
+
+<p class="note">
+  The evidence reaches from {{span .Summary.EarliestUTC .Summary.LatestUTC}}.
+  <!-- Said in the open rather than inside the fold. The span is the one number
+       on this screen that a sentinel can move by decades, and a reader who is
+       not told that some entries were set aside has no way to know the range
+       was ever at risk. -->
+  {{if .Summary.EpochDefaultEntries}}
+    {{.Summary.EpochDefaultEntries}} timeline
+    {{plural .Summary.EpochDefaultEntries "entry carries" "entries carry"}} a
+    date that came from a clock's default rather than from a clock: either the
+    zero of the format the field is stored in — 1601, 1970 or 1980 — or a device
+    whose real-time clock had lost power and restarted at 2000-01-01.
+    {{plural .Summary.EpochDefaultEntries "It is" "They are"}} listed in the
+    timeline, each labelled with which,
+    and left out of this range, which {{plural .Summary.EpochDefaultEntries
+    "it" "they"}} would otherwise drag back by decades.
+  {{end}}
+</p>
+
+<!-- The counts and the span stay in the open; everything else about the summary
+     folds. An analyst opening the report should be able to see its shape in one
+     screen and then choose what to read, which they cannot do if the first
+     section is already several hundred words long.
+
+     The findings are inside the fold and their count is on the label, so the
+     report still says how many there are before it is opened. -->
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-summary">
+  <label class="disclose-label" for="disc-summary">
+    <span class="disclose-title">
+      {{- if .Findings}}Headline findings —
+        {{len .Findings}} {{plural (len .Findings) "finding" "findings"}}
+      {{- else}}Headline findings — none{{end}}, and how to read these
+      numbers</span>
+  </label>
+  <div class="disclose-body">
+
+<!-- Its own paragraph, and labelled. Run on after the span, one count reads
+     into the next and the qualification reads as part of the range. -->
+<p class="note">
+  {{if .Summary.WallClockEntries}}
+    <strong>Note:</strong> {{.Summary.WallClockEntries}} of
+    {{.Summary.TimelineEntries}} timeline
+    {{plural .Summary.TimelineEntries "entry" "entries"}} rest on a local time
+    recorded with no time zone, so they are placed by conversion rather than by
+    a recorded instant.
+    <!-- Where the host keeps two offsets the season is not recorded, so the
+         entry has two readings. The explanation of why belongs beside the
+         timeline, not in the summary: at a glance the analyst needs to know the
+         second reading exists and where to read it. -->
+    {{if .Summary.AmbiguousEntries}}
+      Both readings are preserved in {{$.Cite "timeline.csv"}}, in
+      <span class="mono">time_utc</span> and
+      <span class="mono">time_utc_alt</span>.
+    {{end}}
+  {{else}}
+    <strong>Note:</strong> every timeline entry rests on a recorded UTC instant.
+  {{end}}
+</p>
+
+<!-- What a silence in this report is allowed to mean. An hour with no records
+     is a quiet hour or an hour switched off, and a connection that never closed
+     is a stick pulled out unrecorded or a machine shut down with it still in
+     the port. Only the host's own starts and stops tell those apart, so the
+     count is stated even when it is zero — where the session evidence is
+     missing, that is the thing the reader has to know. -->
+<p class="note">
+  {{if or .Summary.HostStarts .Summary.HostStops}}
+    <strong>Host sessions:</strong> the evidence records the host starting
+    {{.Summary.HostStarts}} {{plural .Summary.HostStarts "time" "times"}} and
+    going off {{.Summary.HostStops}}
+    {{plural .Summary.HostStops "time" "times"}}
+    {{- if .Summary.HostStopsUnexpected}}, of which
+      {{.Summary.HostStopsUnexpected}} closed no logs and so were a power loss
+      or a hard stop{{end}}. Records made while the machine was off are not
+    missing evidence; there was nothing to record.
+    {{if .Summary.ConnectionsEndedByShutdown}}
+      {{.Summary.ConnectionsEndedByShutdown}}
+      {{plural .Summary.ConnectionsEndedByShutdown "connection" "connections"}}
+      {{plural .Summary.ConnectionsEndedByShutdown "has" "have"}} no removal
+      recorded and {{plural .Summary.ConnectionsEndedByShutdown "is" "are"}}
+      followed by a shutdown, which is the ordinary reason: a machine switched
+      off with a device attached records no departure. Nothing places those
+      devices on the host after that point.
+    {{end}}
+  {{else}}
+    <strong>Host sessions:</strong> nothing in this evidence records the host
+    starting or shutting down, so a stretch with no records cannot be told
+    apart from a stretch with the machine switched off, and a connection with
+    no removal recorded cannot be explained by a shutdown.
+  {{end}}
+</p>
+
+{{if .Findings}}
+<ul class="findings">
+  {{range .Findings}}
+  <li class="finding {{.Kind}}">
+    <div class="headline">{{.Headline}}</div>
+    <!-- A finding that names devices writes one per line, and each gets its own
+         row: four devices run together into a paragraph have to be read before
+         they can be counted, and the headline above has already counted them. -->
+    {{$items := .Items}}
+    {{if gt (len $items) 1}}
+    <ul class="detail-list">
+      {{range $items}}<li>{{.}}</li>{{end}}
+    </ul>
+    {{else}}
+    {{range $items}}<div class="detail">{{.}}</div>{{end}}
+    {{end}}
+    <div class="basis">{{$.Cite .Basis}}</div>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="empty">
+  Nothing in this evidence rose to a headline finding. The device inventory
+  below is still the full list of what was found.
+</p>
+{{end}}
+
+  </div>
+</section>
+
+<h2 id="significant">Significant devices</h2>
+
+<p class="note">
+  The unit here is the physical device, not the devnode: a single stick appears
+  under several enumerators, and each card names the identities it grouped and
+  the route that grouped them. Every value carries the file it came from and
+  the place within it; that file's hash is in
+  <span class="mono">provenance/sources.csv</span>, recorded once rather than
+  repeated on every row here.
+</p>
+
+{{if .Significant}}
+<!-- One disclosure per tier. Not a details element, for the same reason the
+     timeline filter is not one: a closed one cannot be forced open for printing
+     by any stylesheet, and a printed report that silently omitted a tier is
+     a report that lies by omission. This collapses with a checkbox and a CSS
+     rule the print stylesheet overrides, so paper always carries everything. -->
+{{range .Tiers}}
+<section class="disclose tier{{.Tier}}">
+  <input class="disclose-toggle" type="checkbox" id="disc-tier{{.Tier}}">
+  <label class="disclose-label" for="disc-tier{{.Tier}}">
+    <span class="disclose-title">Tier {{.Tier}} —
+      {{len .Devices}} {{plural (len .Devices) "device" "devices"}}</span>
+    <!-- The names are outside the fold. A collapsed section reading "7 devices"
+         says nothing about whether it is worth opening; one that names them can
+         be dismissed without opening it.
+
+         They are plain text here and not the filter. Inside the label, every
+         one of them opened the fold — which is what an examiner reported: the
+         pills looked like the timeline's and behaved like a toggle. The filter
+         is a separate bar inside the fold, below, and the stylesheet withdraws
+         these the moment it appears: two rows of the same names an inch apart,
+         only one of which does anything, is the same confusion again. -->
+    <span class="disclose-names">
+      {{- range .Names}}<span class="name-chip">{{.}}</span>{{end -}}
+    </span>
+  </label>
+  <div class="disclose-body">
+{{- template "filterbar" .Bar}}
+<!-- $ is the document inside the range below, not this tier, so the group name
+     is captured here. -->
+{{$group := .Group}}
+<div class="filter-targets">
+{{range .Cards}}
+<article class="card tier{{.Tier}} fx-{{$group}}-{{.Index}}">
+  <header class="card-head">
+    <div>
+      <h3>{{.Label}}</h3>
+      <div class="card-sub mono">{{.PhysicalDeviceID}}</div>
+    </div>
+    <div class="badges">
+      <span class="badge tier{{.Tier}}">Tier {{.Tier}} · {{.Category}}</span>
+      <span class="badge score">score {{printf "%.0f" .Score}}</span>
+      {{if .ReviewRequired}}<span class="badge review">review</span>{{end}}
+    </div>
+  </header>
+
+  {{if .ReviewRequired}}
+  <p class="card-review">{{sentence .ReviewReason}}</p>
+  {{end}}
+
+  <!-- The card's numbers. Each is a count of records, and a zero is shown
+       rather than hidden: "no file record reached this device" is a finding
+       about a storage device, and an absent row would read as not looked at. -->
+  <div class="card-stats">
+    <div><span class="stat">{{.IdentityCount}}</span>
+      <span class="stat-label">{{plural .IdentityCount "identity" "identities"}} grouped</span></div>
+    <div><span class="stat">{{.EventCount}}</span>
+      <span class="stat-label">event {{plural .EventCount "record" "records"}}</span></div>
+    <div><span class="stat">{{.ConnectionWindows}}</span>
+      <span class="stat-label">connection {{plural .ConnectionWindows "window" "windows"}}</span></div>
+    <div><span class="stat">{{.FilePaths}}</span>
+      <span class="stat-label">file {{plural .FilePaths "path" "paths"}} linked</span></div>
+  </div>
+
+  <dl class="card-facts">
+    {{if .Serial}}
+    <div><dt>Serial</dt><dd class="mono">{{.Serial}}</dd></div>
+    {{else}}
+    <div><dt>Serial</dt><dd class="absent">none recorded — this device cannot be
+      told apart from another of the same model</dd></div>
+    {{end}}
+    {{with .Mfg}}<div><dt>Manufacturer</dt><dd>{{.}}</dd></div>{{end}}
+    {{with .Class}}<div><dt>Class</dt><dd>{{.}}</dd></div>{{end}}
+    {{with .LinkedDriveLetters}}<div><dt>Drive letters</dt><dd>{{.}}</dd></div>{{end}}
+    {{with .VolumeLabels}}<div><dt>Volume labels</dt><dd>{{.}}</dd></div>{{end}}
+    <div><dt>First seen</dt><dd>{{instant .FirstSeenUTC}}</dd></div>
+    <div><dt>Last seen</dt><dd>{{instant .LastSeenUTC}}</dd></div>
+    {{if .ConnectionWindows}}
+    <!-- Two instants, named as the records they are. "Connected X to Y" would
+         state a continuity nothing evidenced: the log records an arrival, and
+         later the next removal, and whether the device stayed attached between
+         them is written down nowhere. -->
+    <div><dt>Arrival and removal records</dt><dd>
+      earliest arrival {{instant .FirstStartedUTC}}
+      {{- if .LastEndedUTC}}; latest removal {{instant .LastEndedUTC}}
+      {{- else}}; no removal recorded{{end}}
+      {{- if .OpenEndedWindows}} · {{.OpenEndedWindows}}
+        {{plural .OpenEndedWindows "arrival has" "arrivals have"}} no removal
+        after {{plural .OpenEndedWindows "it" "them"}}{{end}}
+      {{- if .UnknownStartWindows}} · {{.UnknownStartWindows}}
+        {{plural .UnknownStartWindows "removal has" "removals have"}} no arrival
+        before {{plural .UnknownStartWindows "it" "them"}}, so the device was
+        already attached when the evidence begins{{end}}</dd></div>
+    {{end}}
+    {{if .FileRecords}}
+    <div><dt>File activity</dt><dd>{{.FileRecords}}
+      {{plural .FileRecords "record" "records"}} across {{.FilePaths}}
+      {{plural .FilePaths "path" "paths"}}, strongest link
+      <span class="confidence {{.FileConfidence}}">{{.FileConfidence}}</span></dd></div>
+    {{end}}
+  </dl>
+
+  <p class="card-why">
+    <strong>Why this classification:</strong> {{sentence .ClassificationReason}}
+  </p>
+
+  <!-- The drill-downs. Collapsed because a card that opened with eleven
+       registry paths would bury the answer it exists to give. Checkboxes
+       rather than details elements for the reason the tiers are: a closed one
+       is closed on paper too, whatever the print stylesheet says. -->
+  {{if .Fields}}
+  {{$fold := fold}}
+  <div class="disclose fold">
+    <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+    <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Where each value came from ({{len .Fields}})</span></label>
+    <div class="disclose-body">
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
+      <tbody>
+      {{range .Fields}}
+        <tr>
+          <td>{{.Label}}{{if .Disputed}}
+            <div class="disputed">{{.DistinctValues}} identities in this group
+              carry different values</div>{{end}}</td>
+          <td class="mono wrap">{{.Value}}
+            {{with .Note}}<div class="disputed">{{.}}</div>{{end}}</td>
+          <td class="source">
+            <div class="mono wrap">{{.Locator}}</div>
+            <div class="mono wrap faint">{{source .SourcePath}}</div>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+  {{end}}
+
+  {{$fold := fold}}
+  <div class="disclose fold">
+    <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+    <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Identities grouped into this device ({{.IdentityCount}})</span></label>
+    <div class="disclose-body">
+    <ul class="identities mono">
+      {{range .IdentityList}}<li>{{.}}</li>{{end}}
+    </ul>
+    <p class="note">Grouped by: {{.GroupingMethods}}.
+      Named in: {{.EvidenceSources}}.</p>
+    </div>
+  </div>
+
+  {{if .Facts}}
+  {{$fold := fold}}
+  <div class="disclose fold">
+    <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+    <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Facts this rests on ({{len .Facts}})</span></label>
+    <div class="disclose-body">
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Fact</th><th>Evidence</th></tr></thead>
+      <tbody>
+      {{range .Facts}}
+        <tr><td class="mono">{{.Fact}}</td><td>{{.Evidence}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+  {{end}}
+
+  {{if .Sources}}
+  {{$fold := fold}}
+  <div class="disclose fold">
+    <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+    <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Files this device was read from ({{len .Sources}})</span></label>
+    <div class="disclose-body">
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Evidence</th><th class="number">Records</th><th>File</th></tr></thead>
+      <tbody>
+      {{range .Sources}}
+        <tr>
+          <td class="mono">{{.Evidence}}</td>
+          <td class="number">{{.Records}}</td>
+          <td class="source">
+            <div class="mono wrap">{{source .SourcePath}}</div>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+  {{end}}
+</article>
+{{end}}
+</div>
+  </div>
+</section>
+{{end}}
+{{else}}
+<p class="empty">
+  No device in this evidence reached tier 1 or tier 2. Everything found is in
+  {{.Cite "devices.csv"}}.
+</p>
+{{end}}
+
+<h2 id="timeline">Timeline</h2>
+
+<p class="note">
+  Every timestamped record belonging to a tier 1 or tier 2 device, oldest first.
+  Each row names the artefact it came from and what its timestamp means, because
+  the times here are not all the same kind of thing: an arrival is an event, a
+  <span class="mono">last_arrival_date</span> is one stored value that the next
+  arrival overwrites, and a file's timestamp is usually when the file was
+  written rather than when it was opened. A row says how firmly the record ties
+  to the device it is filed under only where that is less than certain. The
+  number on the left of each row is
+  its <span class="mono">entry_id</span> in
+  {{$.Cite "timeline-significant.csv"}}. Every entry is in
+  {{$.Cite "timeline.csv"}}, including those for tier 3 devices and
+  those no device could be linked to — a shell item recording a folder on a
+  volume this evidence cannot tie to a device is a record, and it is absent from
+  this section rather than from the case. A record carrying no usable time is on
+  no timeline at all; it is in the file activity section below, marked
+  <span class="unit absent">no time</span>, with what it does carry.
+</p>
+
+{{if .Timeline.Rows}}
+<p class="note">
+  {{if .Timeline.Capped}}
+    Showing the first {{len .Timeline.Rows}} of {{.Timeline.Total}} entries;
+    the remaining {{.Timeline.Omitted}} are in
+    {{$.Cite "timeline-significant.csv"}}.
+  {{else}}
+    All {{.Timeline.Total}} {{plural .Timeline.Total "entry" "entries"}}.
+  {{end}}
+  {{if .Timeline.WallClock}}
+    {{.Timeline.WallClock}} of them {{plural .Timeline.WallClock "rests" "rest"}}
+    on a local wall clock recorded with no time zone
+    {{- if .Timeline.ZoneFound}}, converted with the host zone
+      (<span class="mono">{{.Timeline.Zone}}</span>){{end}}, and
+    {{plural .Timeline.WallClock "is" "are"}} marked
+    <span class="unit converted">local→UTC</span> rather than
+    <span class="unit recorded">UTC</span>.
+    {{if .Timeline.Ambiguous}}{{.Timeline.Ambiguous}} of those
+      {{plural .Timeline.Ambiguous "has" "have"}} two readings, an hour apart,
+      because the record does not say which season it was written in; both are
+      shown rather than one being chosen.{{end}}
+  {{else}}
+    Every entry shown rests on an instant its artefact recorded.
+  {{end}}
+  {{if .Timeline.EpochDefault}}
+    {{.Timeline.EpochDefault}} {{plural .Timeline.EpochDefault "is" "are"}}
+    marked <span class="unit epoch">epoch default</span>: the date on the row
+    came from a clock's default rather than from a clock — the zero of the
+    format the field is stored in, or a device whose real-time clock had lost
+    power and restarted at 2000-01-01, carrying on from there so that the date
+    measures the device's uptime instead of the moment. Each row names which.
+    They are listed in their sorted position so the record is not lost, and
+    they are excluded from the evidence span at the top of this report.
+  {{end}}
+</p>
+
+<!-- Collapsed by default. Several hundred entries is most of the document's
+     height, and with it open the file activity section below is far enough down
+     the page to be missed entirely. -->
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-timeline">
+  <label class="disclose-label" for="disc-timeline">
+    <span class="disclose-title">Show the timeline —
+      {{len .Timeline.Rows}} {{plural (len .Timeline.Rows) "entry" "entries"}}
+      across {{len .Timeline.Filters}}
+      {{plural (len .Timeline.Filters) "device" "devices"}}</span>
+  </label>
+  <div class="disclose-body">
+
+<!-- The filter is radio buttons and CSS. There is no script on this page, so
+     what an examiner opens in five years is what was written today, and with no
+     rule matching at all every entry stays visible — the safe direction for a
+     filter to fail in. Printing ignores the filter for the same reason. -->
+<section class="timeline">
+  {{- template "filterbar" .Timeline.Bar}}
+
+  <ol class="timeline-entries filter-targets">
+    {{- range .Timeline.Rows}}
+    <li class="entry fx-timeline-{{.DeviceIndex}}" id="entry-{{.EntryID}}">
+      <div class="entry-when">
+        <span class="entry-id mono faint">{{.EntryID}}</span>
+        <span class="mono">{{.When}}</span>
+        <!-- The sentinel case is tested before the other two. A row whose time
+             is the FAT epoch is not a recorded instant and not a converted wall
+             clock; calling it either would be the report agreeing that a
+             placeholder is a measurement. -->
+        {{- if .Sentinel}}
+        <span class="unit epoch">epoch default</span>
+        {{- else if .Recorded}}
+        <span class="unit recorded">UTC</span>
+        {{- else}}
+        <span class="unit converted">local&rarr;UTC</span>
+        {{- end}}
+      </div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="chip cat-{{.Category}}">{{.Category}}</span>
+          <span class="event mono">{{.Event}}</span>
+          <span class="entry-label">{{.Name}}</span>
+          {{- with .DriveLetter}}<span class="chip letter">{{.}}:</span>{{end}}
+          <!-- The confidence is about the tie between the record and the
+               device, not about whether the event happened. Shown only where it
+               is less than certain: on a registry row it is confirmed by
+               construction, and a page of "confirmed" chips both says nothing
+               and invites the wrong reading of the ones that matter.
+
+               It names the device. "probable link to this device" was reported
+               from real evidence as unreadable, and rightly: every other word
+               on a file row is about the file, so "this device" points at
+               nothing the eye has passed. The name is the one the chip above
+               carries, so the row and its filter agree. -->
+          {{- if .Uncertain}}
+          <span class="confidence {{.Confidence}}">{{.Confidence}} link to
+            {{- with .LinkedTo}} {{.}}{{else}} this device{{end}}</span>
+          {{- end}}
+        </div>
+        {{with .Meaning}}<div class="entry-means">{{sentence .}}</div>{{end}}
+        {{with .Qualifier}}<div class="entry-basis">{{.}}</div>{{end}}
+        <!-- Two lines, not one. What the record is and what file it was read
+             from are different questions, and run together they made a single
+             unbroken string an eye has to parse before it can find either. The
+             file is on its own line and every row has one: a device_state row
+             naming only its control set, with no file beside it, read as an
+             assertion nobody could go and check. -->
+        <div class="entry-source faint">
+          <div><span class="mono">{{.Artefact}}</span>
+            {{- with .Detail}} · {{.}}{{end}}</div>
+          {{if .SourcePath}}
+          <div class="mono wrap">{{source .SourcePath}}</div>
+          {{else}}
+          <div class="absent">no source file recorded for this entry</div>
+          {{end}}
+        </div>
+      </div>
+    </li>
+    {{- end}}
+  </ol>
+</section>
+
+  </div>
+</section>
+{{else}}
+<p class="empty">
+  No timestamped record belongs to a device at tier 1 or tier 2. Where the
+  evidence holds timestamped records at all they are in
+  {{.Cite "timeline.csv"}}.
+</p>
+{{end}}
+
+<h2 id="file-activity">File activity</h2>
+
+<p class="note">
+  File and folder records — shortcuts, jump lists, shell bags and MRU lists —
+  grouped by the device the evidence links them to. A record here is a record
+  that <em>names</em> a file; it is not proof the file was copied, and the
+  meaning of each timestamp is on the row.
+</p>
+
+<p class="note">
+  <strong>Each device shows its firmest links first, and weaker ones behind a
+  disclosure.</strong> The split is per device rather than against a fixed bar,
+  because on current Windows the <span class="mono">EMDMgmt</span> key that once
+  tied a volume serial to a device is gone: nothing is <em>confirmed</em> and
+  little is <em>strong</em>, so a fixed bar would have hidden every file record
+  in most cases. What each link rests on is written beside it, and that, rather
+  than the ranking word, is what a reader should act on.
+</p>
+
+{{if .Files.Any}}
+
+{{if .Files.Capped}}
+<p class="note">
+  Showing {{.Files.Records}} of {{.Files.Total}} attributed records; the
+  remaining {{.Files.Omitted}} are in
+  {{$.Cite "file-attribution.csv"}}.
+</p>
+{{end}}
+
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-files">
+  <label class="disclose-label" for="disc-files">
+    <span class="disclose-title">Show the file activity —
+      {{.Files.Records}} {{plural .Files.Records "record" "records"}} across
+      {{len .Files.Devices}} {{plural (len .Files.Devices) "device" "devices"}}</span>
+    <!-- Plain text, not the filter: inside the label every one of these opened
+         the fold rather than narrowing to the device. The filter is the bar
+         inside, below, and these withdraw once it is on screen — collapsed they
+         are the only names the section shows, open they are a second row saying
+         the same thing and doing nothing. -->
+    <span class="disclose-names">
+      {{- range .Files.Devices}}<span class="name-chip">{{.Label}}</span>{{end -}}
+    </span>
+  </label>
+  <div class="disclose-body">
+{{- template "filterbar" .Files.Bar}}
+<div class="filter-targets">
+{{range .Files.Devices}}
+<article class="card tier{{.Tier}} files fx-files-{{.Index}}">
+  <header class="card-head">
+    <div>
+      <h3>{{.Label}}</h3>
+      <div class="card-sub mono">{{.PhysicalDeviceID}}</div>
+    </div>
+    <div class="badges">
+      <span class="badge">{{.Records}} {{plural .Records "record" "records"}}</span>
+      <span class="badge">firmest link <span class="confidence {{.Best}}">{{.Best}}</span></span>
+    </div>
+  </header>
+
+  {{template "filerows" .Strongest}}
+
+  {{if .Weaker}}
+  {{$fold := fold}}
+  <div class="disclose fold">
+    <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+    <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Weaker associations ({{len .Weaker}})</span></label>
+    <div class="disclose-body">
+    <p class="note">
+      These reached this device by a route the evidence supports less firmly.
+      The reason on each row is what to weigh, not the word.
+    </p>
+    {{template "filerows" .Weaker}}
+    </div>
+  </div>
+  {{end}}
+</article>
+{{end}}
+</div>
+
+{{if .Files.Gaps}}
+{{$fold := fold}}
+<div class="disclose fold gaps">
+  <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+  <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Records that reached no device ({{.Files.GapTotal}})</span></label>
+  <div class="disclose-body">
+  <p class="note">
+    Each says what stopped it. A record on the system drive reaching no USB
+    device is the expected answer; a record on a removable letter that reaches
+    none is a gap in what this evidence can link.
+    {{if .Files.GapsCapped}}
+      Showing {{len .Files.Gaps}} of {{.Files.GapTotal}}; the rest are in
+      {{$.Cite "file-attribution-summary.csv"}}.
+    {{end}}
+  </p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Record</th><th>Why no device</th><th>Source</th></tr></thead>
+    <tbody>
+    {{range .Files.Gaps}}
+      <tr>
+        <td>
+          <div class="mono wrap">{{nonEmpty .Path "(no path recorded)"}}</div>
+          <div class="faint">{{.Artefact}}{{with .Detail}} · {{.}}{{end}}
+            {{- with .Profile}} · profile {{.}}{{end}}</div>
+        </td>
+        <td>{{sentence .Reason}}</td>
+        <td class="source">
+          <div class="mono wrap faint">{{source .SourcePath}}</div>
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  </div>
+</div>
+{{end}}
+
+  </div>
+</section>
+
+{{else}}
+<p class="empty">
+  No file or folder record was read from this evidence, so there is nothing to
+  link to a device. What was looked for is in the coverage table below.
+</p>
+{{end}}
+
+<h2 id="executions">Programmes and the devices they touched</h2>
+
+{{if .Prefetch.Any}}
+
+<!-- Prefetch already reached this report through the headline findings, the
+     device facts, the file activity and the timeline. That is enough to be
+     found and not enough to be read: an analyst asking what ran off a stick,
+     when, and what it touched on it had to assemble the answer from four
+     places. This is the answer in one. -->
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-executions">
+  <label class="disclose-label" for="disc-executions">
+    <span class="disclose-title">Show what ran —
+      {{if .Prefetch.RanFrom}}{{.Prefetch.RanFrom}} {{plural .Prefetch.RanFrom "programme" "programmes"}} ran from a device
+      {{- else}}no programme ran from a device{{end}}
+      {{- if .Prefetch.Loaded}}, {{.Prefetch.Loaded}} read from one{{end}}</span>
+  </label>
+  <div class="disclose-body">
+
+<p class="note">
+  Windows keeps the last eight executions of a programme and overwrites the
+  rest, so the times below are the ones that survive rather than the whole
+  history — which is why the count Windows kept and the number of times shown
+  differ. Prefetch records that a programme ran, not that a person ran it;
+  {{$.Cite "user-assist.csv"}} is the artefact that speaks to that.
+</p>
+
+{{range .Prefetch.Devices}}
+<article class="card tier{{.Tier}} files">
+  <header class="card-head">
+    <div>
+      <h3>{{.Label}}</h3>
+      <div class="card-sub mono">{{.PhysicalDeviceID}}</div>
+    </div>
+    <div class="badges">
+      {{if .RanFrom}}<span class="badge">{{len .RanFrom}}
+        ran from this device</span>{{end}}
+      {{if .Loaded}}<span class="badge">{{len .Loaded}}
+        read from it</span>{{end}}
+    </div>
+  </header>
+
+  {{if .RanFrom}}
+  {{template "prefetchrows" .RanFrom}}
+  {{end}}
+
+  {{if .Loaded}}
+  <!-- Its own fold, not a footnote. "Ran from" and "read a file from" are
+       different findings, and one table holding both would let a reader count
+       the wrong one. -->
+  {{$fold := fold}}
+  <div class="disclose fold">
+    <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+    <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">Read from this device, but ran from somewhere else ({{len .Loaded}})</span></label>
+    <div class="disclose-body">
+    <p class="note">
+      A programme on the system disk that opened one file on this device
+      reaches it through the same chain as one executed off it. It is a
+      weaker and separate claim, and is kept apart for that reason.
+    </p>
+    {{template "prefetchrows" .Loaded}}
+    </div>
+  </div>
+  {{end}}
+</article>
+{{end}}
+
+  </div>
+</section>
+
+{{else}}
+<!-- Absence stated rather than left silent: no prefetch reaching a removable
+     device is a finding about the collection, and a missing section reads as a
+     question nobody asked. -->
+<p class="empty">
+  No prefetch record in this evidence names a volume that reached a device —
+  either the host had prefetching off, the collection was taken without
+  <span class="mono">\Windows\Prefetch</span>, or every programme ran from the
+  system disk. The limitations below say which.
+</p>
+{{end}}
+
+{{/* One programme per block, its facts stacked beneath it.
+
+     This was a five-column table and every cell in it was a paragraph, a file
+     list or a sentence of reasoning — so a device path wrapped to eight lines
+     in a two-inch column while the row beside it wrapped to one, and the
+     programme the row is about was the narrowest thing on the page. The file
+     activity section hit exactly this and was rebuilt the same way; the note in
+     the stylesheet there has said so since.
+
+     A table is for values that line up and can be compared down a column.
+     Nothing here does: no reader scans a column of file lists. The programme
+     leads, its facts are labelled underneath, and the long content gets the
+     width of the page. */}}
+{{define "prefetchrows"}}
+<ol class="run-list">
+  {{- range .}}
+  <li class="run">
+    <div class="run-head">
+      <span class="run-name mono wrap">{{.Executable}}</span>
+      <!-- Both numbers. Windows counted the first and kept the second, and
+           either alone misleads: the count with no times invites "it ran 400
+           times" with nothing to place them, and the times alone invite "it
+           ran twice". -->
+      <span class="badge">{{.RunCount}}
+        {{plural .RunCount "run" "runs"}} counted ·
+        {{.TimesRecorded}} still recorded</span>
+    </div>
+    <dl class="run-facts">
+      <div>
+        <dt>Executions</dt>
+        <dd>
+          {{- if .Executions}}
+          <ul class="run-values">
+            {{- range .Executions}}<li class="mono">{{.}}</li>{{end}}
+          </ul>
+          {{- else}}
+          <span class="absent">no execution time survives on this record</span>
+          {{- end}}
+        </dd>
+      </div>
+      <div>
+        <dt>Read from this device</dt>
+        <dd>
+          {{- if .FilesLoaded}}
+          <div class="faint">{{.FilesLoaded}}
+            {{plural .FilesLoaded "file" "files"}}</div>
+          <ul class="run-values">
+            {{- range .LoadedFiles}}<li class="mono wrap">{{.}}</li>{{end}}
+          </ul>
+          {{- else}}
+          <!-- Stated rather than left blank. The volume was reached and no file
+               on it is named, which is a different fact from an empty cell. -->
+          <span class="absent">the volume was touched; no file on it is
+            named</span>
+          {{- end}}
+        </dd>
+      </div>
+      <div>
+        <dt>Volume</dt>
+        <dd>
+          <span class="mono">{{with .DriveLetter}}{{.}}:{{end}}
+            {{- with .VolumeLabel}} {{.}}{{end}}</span>
+          <div class="faint">{{.VolumeRoute}} · {{.VolumeConfidence}}</div>
+          {{- if .LetterContradicted}}
+          <div class="faint">the volume's own label names a different device
+            than this letter reaches, so the link is capped</div>
+          {{- end}}
+        </dd>
+      </div>
+      <div>
+        <dt>Source</dt>
+        <dd class="mono wrap faint">{{source .SourcePath}}</dd>
+      </div>
+    </dl>
+  </li>
+  {{- end}}
+</ol>
+{{end}}
+
+<h2 id="other-devices">Other devices</h2>
+
+{{if .Others.Any}}
+
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-others">
+  <label class="disclose-label" for="disc-others">
+    <span class="disclose-title">Show the other devices —
+      {{.Others.Devices}} {{plural .Others.Devices "device" "devices"}} at tier 3
+      {{- if .Others.Review}}, {{len .Others.Review}} flagged for review{{end}}</span>
+    <!-- The review count is on the label rather than inside the fold. Review is
+         not a tier, and a flagged keyboard behind a section headed "unlikely to
+         matter" is exactly the thing a reader would never open to find. -->
+  </label>
+  <div class="disclose-body">
+
+<p class="note">
+  {{.Others.Devices}} {{plural .Others.Devices "device" "devices"}} the
+  classification put in tier 3 — hubs, keyboards, cameras, the machine's own
+  disks and the like — accounting for {{.Others.Events}} event
+  {{plural .Others.Events "record" "records"}}. They are here in full, grouped
+  and collapsed: the tier says they are unlikely to matter, which is not the
+  same as saying they do not exist, and a report that dropped them could not be
+  checked. Full detail for every one of them is in
+  {{$.Cite "devices.csv"}}.
+</p>
+
+{{if .Others.Review}}
+<!-- Review is not a tier. A keyboard with a duplicated serial is still a
+     keyboard and still the thing to look at, so it is lifted out of the
+     collapsed groups rather than being buried among seventy siblings. -->
+<div class="review-list">
+  <h3>Flagged for review</h3>
+  <p class="note">
+    These are tier 3 by category and still asking for attention. Review is a
+    flag, not a tier.
+  </p>
+  <ul class="findings">
+    {{range .Others.Review}}
+    <li class="finding review">
+      <div class="headline">{{.Label}}
+        <span class="badge tier3">{{.Category}}</span></div>
+      <div class="detail">{{sentence .ReviewReason}}</div>
+      <div class="basis mono">{{.PhysicalDeviceID}}</div>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
+{{range .Others.Categories}}
+{{$fold := fold}}
+<div class="disclose fold other-group">
+  <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+  <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">{{.Category}} — {{len .Devices}} {{plural (len .Devices) "device" "devices"}}, {{.Events}} event {{plural .Events "record" "records"}}</span></label>
+  <div class="disclose-body">
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Device</th>
+        <th class="number">Identities</th>
+        <th class="number">Events</th>
+        <th>First seen</th>
+        <th>Last seen</th>
+        <th>Why</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Devices}}
+      <tr>
+        <td>
+          <div>{{.Label}}</div>
+          <div class="mono faint wrap">{{.PhysicalDeviceID}}</div>
+        </td>
+        <td class="number">{{.IdentityCount}}</td>
+        <td class="number">{{.EventCount}}</td>
+        <td class="mono">{{instant .FirstSeenUTC}}</td>
+        <td class="mono">{{instant .LastSeenUTC}}</td>
+        <td class="faint">{{sentence .ClassificationReason}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  </div>
+</div>
+{{end}}
+
+  </div>
+</section>
+
+{{else}}
+<p class="empty">
+  Every device found in this evidence reached tier 1 or tier 2.
+</p>
+{{end}}
+
+<h2 id="coverage">Evidence coverage</h2>
+
+<p class="note">
+  What was read, and how much of it. A figure in this report can only speak for
+  the artefacts listed here; where an artefact is absent, the report is silent
+  rather than negative.
+</p>
+
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-coverage">
+  <label class="disclose-label" for="disc-coverage">
+    <span class="disclose-title">Show what was read —
+      {{len .Coverage}} artefact {{plural (len .Coverage) "kind" "kinds"}}</span>
+  </label>
+  <div class="disclose-body">
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Artefact</th>
+      <th class="number">Sources</th>
+      <th class="number">Size</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{range .Coverage}}
+    <tr>
+      <td>{{.Artefact}}</td>
+      <td class="number">{{.Sources}}</td>
+      <td class="number">{{bytes .Bytes}}</td>
+      <td>
+        {{if .NotReplayed}}{{.NotReplayed}} hive{{plural .NotReplayed "" "s"}} read
+          with no transaction-log page applied, and so possibly missing the most
+          recent writes. This covers a recovery that failed and one that ran and
+          changed nothing; <span class="mono">provenance/sources.csv</span> says
+          which, per hive.{{end}}
+        {{if .Failed}}{{.Failed}} failed to parse.{{end}}
+        {{if .Malformed}}{{.Malformed}} malformed.{{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+
+  </div>
+</section>
+
+<h2 id="limitations">Limitations</h2>
+
+<p class="note">
+  What the run could not read, and what was not there to read. These are
+  separate claims: an artefact that was absent from the collection and one that
+  was present and would not parse constrain a conclusion differently. A
+  <span class="severity partial">partial</span> row is a third case again — the
+  records are in the outputs below and something inside them did not parse, so
+  what they say is true and is not all of what they held.
+</p>
+
+<section class="disclose">
+  <input class="disclose-toggle" type="checkbox" id="disc-limitations">
+  <label class="disclose-label" for="disc-limitations">
+    <!-- The count is on the label so a reader knows whether there is anything
+         behind it without opening it. A limitation is what stops a conclusion
+         being drawn, and a folded section that might be empty and might hold
+         four failed hives is not something to leave a reader guessing at. -->
+    <span class="disclose-title">Show the limitations —
+      {{if .Limitations}}{{len .Limitations}} on this run, and what this report
+        does not claim{{else}}none on this run, and what this report does not
+        claim{{end}}</span>
+  </label>
+  <div class="disclose-body">
+
+<!-- A channel Boobook reads and this run did not ask for is a limitation, and a
+     different one from a channel nothing reads. Without this the absence of a
+     logon beside a connection reads as evidence there was none, when it is only
+     evidence nobody looked. Rendered from the manifest, which is where the
+     run's own accounting of what it skipped already lives. -->
+{{with .OptInSkipped}}
+<p class="note">
+  <strong>Not read on this run:</strong>
+  {{range .}}<span class="mono">{{.Channel}}</span> ({{bytes .Bytes}}){{end}}.
+  {{plural (len .) "This channel is" "These channels are"}} read only when asked
+  for — pass <span class="mono">-security</span> to include
+  {{plural (len .) "it" "them"}}. Nothing below says anything about what
+  {{plural (len .) "it holds" "they hold"}}: no logon or logoff record was read,
+  so a connection with no person beside it means only that this run did not
+  look.
+</p>
+{{end}}
+
+{{if .Limitations}}
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Severity</th><th>Artefact</th><th>Detail</th></tr>
+  </thead>
+  <tbody>
+  {{range .Limitations}}
+    <tr>
+      <td><span class="severity {{.Severity}}">{{.Severity}}</span></td>
+      <td>{{.Artefact}}</td>
+      <td>{{sentence .Message}}{{with .Path}}<div class="mono">{{source .}}</div>{{end}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">Every artefact the run looked for was present and parsed.</p>
+{{end}}
+
+<h3>What this report does not claim</h3>
+<ul class="note">
+  <li>
+    That a device was <em>used</em> where it was only installed. An install or
+    an arrival date says Windows saw the device, not that a file was moved.
+  </li>
+  <li>
+    That a drive letter belonged to a device at the time a file was opened.
+    <span class="mono">MountedDevices</span> holds the mapping as it stands now,
+    and a letter is reused. A link made through a letter is capped at probable
+    for that reason, and is only lifted there by a connection window
+    independently covering the record.
+  </li>
+  <li>
+    That a device with no serial is a single device. Where no identity in a
+    group reported a serial, two visits by two identical devices and two visits
+    by one look the same in this evidence.
+  </li>
+  <li>
+    That the absence of a record is the absence of an event. Event logs roll,
+    and a collection is a moment.
+  </li>
+  <li>
+    That a person ran a programme, where prefetch records that one ran. A
+    prefetch file is written by the loader, and a scheduled task, an installer
+    and a double-click all produce one.
+  </li>
+  <li>
+    That a programme ran as many times as this report can place. Windows keeps
+    the last eight executions of each and overwrites the rest, so a run count of
+    four hundred beside two timeline entries is the ordinary case and not a gap
+    in the evidence. Both numbers are on every execution row.
+  </li>
+  {{with .PrefetchSetting}}<li>{{.}}</li>{{end}}
+</ul>
+
+  </div>
+</section>
+
+<footer>
+  Generated by {{.Manifest.Tool.Name}} {{.Manifest.Tool.Version}} on
+  {{instant .GeneratedAt}} UTC, which is when this document was written and not
+  when the evidence was collected. The figures above are read from the same
+  queries the files in <span class="mono">data/</span> are copied from; the
+  manifest records the query behind every file and the SHA-256 of what was
+  written.
+</footer>
+
+</main>
+</body>
+</html>
+
+{{/* One table of file records. Used twice per device: once for the firmest
+     links and once inside the disclosure, so the two cannot drift apart in
+     what they show or in what they leave out. */}}
+{{define "filerows"}}
+<ol class="file-list">
+  {{- range .}}
+  <li class="entry" id="record-{{.ActivityID}}">
+    <div class="entry-when">
+      <span class="entry-id mono faint">{{.ActivityID}}</span>
+      <span class="mono">{{instant .RecordedUTC}}</span>
+      {{- if .EpochDefault}}
+      <span class="unit epoch">epoch default</span>
+      {{- else if .RecordedUTC}}
+      <span class="unit recorded">UTC</span>
+      {{- else}}
+      <!-- Marked rather than left blank. A record with no usable time is a
+           finding about the record, and the meaning line below says which kind
+           of nothing it is. -->
+      <span class="unit absent">no time</span>
+      {{- end}}
+    </div>
+    <div class="entry-body">
+      <div class="entry-head">
+        <span class="entry-label mono wrap">{{nonEmpty .Path "(no path recorded)"}}</span>
+        <span class="confidence {{.Confidence}}">{{.Confidence}}</span>
+        <span class="mono faint">{{.Route}}</span>
+      </div>
+      <div class="entry-means">{{.Artefact}}{{with .Detail}} · {{.}}{{end}}
+        {{- with .DriveLetter}} · drive {{.}}:{{end}}
+        {{- with .Profile}} · profile {{.}}{{end}}</div>
+      <!-- The meaning of the timestamp, not just the timestamp. A jump list's
+           key write time dates the most recent entry in the list and not this
+           one, and a report that prints it as "when the file was opened" is
+           simply wrong. -->
+      <div class="entry-means">{{sentence .RecordedMeaning}}</div>
+      {{with .EpochDefault}}
+      <div class="entry-basis">This date is {{.}}, not a moment anything is
+        recorded as happening at.</div>
+      {{end}}
+      <div class="reason">{{sentence .Reason}}</div>
+      {{if .Contested}}
+      <div class="disputed">{{.CandidateDevices}} devices are candidates for this
+        record; it appears under each of them</div>
+      {{end}}
+      <!-- No hash here. The chain of custody is not carried by repeating a
+           sixty-four character digest beside every one of five hundred rows —
+           it is carried by provenance/sources.csv and the manifest, which hold
+           it once per file where it can actually be compared. -->
+      <div class="entry-source faint">
+        <span class="mono wrap">{{source .SourcePath}}</span>
+      </div>
+    </div>
+  </li>
+  {{- end}}
+</ol>
+{{end}}
+
+<!-- One filter bar, used by the timeline, each tier of significant devices and
+     the file activity section.
+
+     It was written three times over as three different things: the timeline had
+     a working filter, and the other two drew the same row of device names
+     inside their fold's label, where pressing one opened the section rather
+     than narrowing it. An examiner learnt the gesture on the timeline and found
+     it did something else everywhere else.
+
+     The radios are siblings of the list they filter and must stay that way: the
+     rules generated in filter.go reach the items with `~ .filter-targets`, so
+     moving either out of this common parent silently stops the filter working
+     while leaving every pill on the page. -->
+{{define "filterbar"}}
+{{- if .Any}}
+<input class="filter-radio" type="radio" name="fg-{{.Group}}" id="f-{{.Group}}-0" checked>
+{{- range .Filters}}
+<input class="filter-radio" type="radio" name="fg-{{$.Group}}" id="f-{{$.Group}}-{{.Index}}">
+{{- end}}
+<nav class="filter-chips" aria-label="{{.Legend}}">
+  <label for="f-{{.Group}}-0">{{.AllLabel}}
+    <span class="chip-count">{{.AllCount}}</span></label>
+  {{- range .Filters}}
+  <label for="f-{{$.Group}}-{{.Index}}" title="{{.PhysicalDeviceID}}">{{.Label}}
+    {{- if .Count}} <span class="chip-count">{{.Count}}</span>{{end}}</label>
+  {{- end}}
+</nav>
+<p class="print-only note">
+  Printed with the device filter ignored: everything below is included.
+</p>
+{{- end}}
+{{end}}
