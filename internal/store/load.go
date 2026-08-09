@@ -24,11 +24,11 @@ import (
 func (s *Store) LoadLedger(ledger *provenance.Ledger) error {
 	sources := ledger.Sources()
 	err := s.insert("source",
-		"id,path,staged_path,artefact,size_bytes,sha256,read_at,replayed,"+
+		"id,sequence,path,staged_path,artefact,size_bytes,sha256,read_at,replayed,"+
 			"replay_logs,replay_note,modified_at,verified,verify_note",
 		len(sources), func(add func(...any) error) error {
 			for _, source := range sources {
-				if err := add(source.ID, source.Path, source.StagedPath,
+				if err := add(source.ID, source.Sequence, source.Path, source.StagedPath,
 					source.Artefact, source.SizeBytes, source.SHA256,
 					source.ReadAt, source.Replayed,
 					strings.Join(source.ReplayLogs, "; "), source.ReplayNote,

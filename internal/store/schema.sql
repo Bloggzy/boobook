@@ -13,6 +13,15 @@
 
 CREATE TABLE source (
     id          VARCHAR PRIMARY KEY,
+    -- The order the run read this file in, from one.
+    --
+    -- The id is a label, not a sort key: its number is padded to four digits
+    -- for the eye, and past 9999 it simply gets wider, so 'src-10000' sorts
+    -- lexicographically before 'src-9999'. Ordering sources.csv by the id
+    -- therefore stops being read order on any collection large enough to reach
+    -- five digits — which a full image with several profiles does, since every
+    -- shortcut, jump list and prefetch file is a source of its own.
+    sequence    BIGINT,
     path        VARCHAR,
     staged_path VARCHAR,
     artefact    VARCHAR,

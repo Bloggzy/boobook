@@ -20,7 +20,23 @@ import (
 // Source is one evidence file, recorded as it was read.
 type Source struct {
 	// ID is stable within a run and is what observations refer to.
+	//
+	// It is a label and not a sort key. The number in it is zero-padded to four
+	// digits for the eye, and Go's %04d is a minimum width rather than a
+	// maximum, so a collection with more than 9999 sources produces src-10000
+	// beside src-9999 — unique and joinable, and lexicographically *before* it.
+	// Use Sequence to recover the order the run read the evidence in.
 	ID string `json:"id"`
+
+	// Sequence is the order this file was read in, from one.
+	//
+	// It exists because the order was being reconstructed from the text of ID,
+	// which couples the id's formatting to the meaning of a sorted file: widen
+	// the padding and every custody record silently reorders. A full disk image
+	// with several profiles can pass 9999 sources without being unusual —
+	// every shortcut, jump list and prefetch file is one — so this is a case
+	// real evidence reaches rather than a theoretical one.
+	Sequence uint64 `json:"sequence"`
 
 	// Path is the location within the evidence root, kept as discovered.
 	Path string `json:"path"`
@@ -180,11 +196,22 @@ type Ledger struct {
 // NewLedger returns an empty ledger.
 func NewLedger() *Ledger { return &Ledger{} }
 
+// SourceID is the label for the nth source a run read.
+//
+// Four digits is a floor and not a ceiling: past 9999 the id simply gets wider,
+// so ids stay unique and every join on one is unaffected. What it is not is a
+// sort key — see Source.Sequence.
+func SourceID(sequence uint64) string {
+	return fmt.Sprintf("src-%04d", sequence)
+}
+
 // AddSource hashes a file and records it, returning the source ID that
 // observations from it must carry.
 func (l *Ledger) AddSource(path, artefact string) (Source, error) {
+	sequence := l.sourceSeq.Add(1)
 	source := Source{
-		ID:       fmt.Sprintf("src-%04d", l.sourceSeq.Add(1)),
+		ID:       SourceID(sequence),
+		Sequence: sequence,
 		Path:     path,
 		Artefact: artefact,
 		ReadAt:   time.Now().UTC(),

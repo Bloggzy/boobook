@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -289,5 +291,80 @@ func TestAChangedSourceKeepsItsObservations(t *testing.T) {
 	if got := len(ledger.Observations()); got != 1 {
 		t.Errorf("got %d observations, want 1: a source that moved is a "+
 			"finding, not a reason to delete what was read from it", got)
+	}
+}
+
+// A source id is a label. The order the run read the evidence in is Sequence,
+// and the two stop agreeing at four digits.
+//
+// %04d is a minimum field width rather than a maximum, so nothing truncates and
+// no two sources ever share an id: past 9999 the id simply gets wider. What
+// breaks is reading the order back out of the text, because 'src-10000' sorts
+// before 'src-9999' — the '1' beats the '9' on the first character that
+// differs. sources.csv is the custody record of what was read and when, so an
+// order that silently stops being read order is worth a test even though
+// nothing about it fails loudly.
+//
+// Ten thousand sources is not a contrived number. Every shortcut, jump list and
+// prefetch file is a source of its own, so a full image with several user
+// profiles reaches it without being unusual; the reference collections carry
+// 302 to 539 only because they are triage collections.
+func TestASourceIDIsALabelAndTheSequenceIsTheOrder(t *testing.T) {
+	dir := t.TempDir()
+	ledger := NewLedger()
+
+	const count = 10002
+	for i := 1; i <= count; i++ {
+		path := filepath.Join(dir, strconv.Itoa(i))
+		if err := os.WriteFile(path, []byte(strconv.Itoa(i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.AddSource(path, "TEST"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sources := ledger.Sources()
+	if len(sources) != count {
+		t.Fatalf("got %d sources, want %d", len(sources), count)
+	}
+
+	// Nothing truncated, and nothing collided.
+	if got := sources[9999].ID; got != "src-10000" {
+		t.Errorf("the ten-thousandth source is %q; the width is a floor, so "+
+			"the id should widen rather than truncate or wrap", got)
+	}
+	unique := map[string]bool{}
+	for _, source := range sources {
+		if unique[source.ID] {
+			t.Fatalf("two sources share the id %q", source.ID)
+		}
+		unique[source.ID] = true
+	}
+
+	// Sequence is the order, and it is the order they were added in.
+	for index, source := range sources {
+		if source.Sequence != uint64(index+1) {
+			t.Fatalf("source %d carries sequence %d", index+1, source.Sequence)
+		}
+	}
+
+	// And the id's text is not. This is the claim the column exists for: sorted
+	// as strings the sources come back in an order no run ever read them in.
+	byID := make([]Source, len(sources))
+	copy(byID, sources)
+	sort.Slice(byID, func(a, b int) bool { return byID[a].ID < byID[b].ID })
+
+	sameOrder := true
+	for index := range byID {
+		if byID[index].Sequence != sources[index].Sequence {
+			sameOrder = false
+			break
+		}
+	}
+	if sameOrder {
+		t.Error("sorting by id gave read order, so this test is no longer " +
+			"holding anything: either the id format changed or the fixture " +
+			"stopped crossing four digits")
 	}
 }

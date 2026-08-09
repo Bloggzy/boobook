@@ -103,9 +103,26 @@ CREATE MACRO is_location(value) AS
 
 -- ---- provenance -----------------------------------------------------------
 
+-- Ordered by the sequence and not by the id.
+--
+-- The id's number is padded to four digits, and Go's %04d is a minimum width
+-- rather than a maximum, so a collection with more than 9999 sources produces
+-- 'src-10000' — which sorts lexicographically *before* 'src-9999'. Ordering
+-- this file by the id was reconstructing read order from the id's text, which
+-- coupled a formatting choice to the meaning of the custody record: widening
+-- the padding would silently reorder every sources.csv ever produced.
+--
+-- It is a case real evidence reaches rather than a theoretical one. The
+-- reference collections carry 302 to 539 sources, but every shortcut, jump list
+-- and prefetch file is one of its own, so a full image with several user
+-- profiles passes 9999 without being unusual.
+--
+-- The id stays exactly as it was. It is unique, every join on it is an exact
+-- string match and so is unaffected, and it is what an examiner quotes.
 CREATE VIEW v_source AS
 SELECT
     id            AS source_id,
+    sequence      AS read_order,
     artefact,
     path          AS source_path,
     staged_path,
@@ -119,7 +136,7 @@ SELECT
     verified,
     verify_note
 FROM source
-ORDER BY source_id;
+ORDER BY sequence;
 
 -- Every observation carrying the file and hash it came from, which is what
 -- makes a reported figure checkable without the manifest open beside it.

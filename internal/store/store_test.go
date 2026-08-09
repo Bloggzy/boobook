@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -5346,5 +5347,71 @@ func TestASingleRecordIsNotReplacedByASummaryOfItself(t *testing.T) {
 	}
 	if len(members) != 0 {
 		t.Errorf("got %d moments holding members, want none", len(members))
+	}
+}
+
+// sources.csv is the custody record of what the run read and when, and it comes
+// out in the order the run read it — on a collection of any size.
+//
+// It used to be ordered by source_id, which is a VARCHAR, so the order was
+// being reconstructed from the id's text. That works only while every id is the
+// same width: 'src-10000' sorts before 'src-9999' because the '1' beats the '9'
+// on the first character that differs, so past four digits the file silently
+// stops being read order with nothing on it to say so.
+//
+// Verified to fail against ORDER BY source_id.
+func TestSourcesAreExportedInTheOrderTheRunReadThem(t *testing.T) {
+	store := open(t)
+
+	dir := t.TempDir()
+	ledger := provenance.NewLedger()
+
+	// Past four digits, because that is the only place the two orderings
+	// disagree. Ten thousand files is about five seconds and is the whole point
+	// of the test — a fixture that stopped short of the boundary would pass
+	// against the defect.
+	const count = 10002
+	for i := 1; i <= count; i++ {
+		path := filepath.Join(dir, strconv.Itoa(i))
+		if err := os.WriteFile(path, []byte(strconv.Itoa(i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.AddSource(path, "TEST"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.LoadLedger(ledger); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := store.db.Query(
+		`SELECT source_id, read_order FROM v_source`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	var seen int
+	for rows.Next() {
+		var id string
+		var order uint64
+		if err := rows.Scan(&id, &order); err != nil {
+			t.Fatal(err)
+		}
+		seen++
+		if order != uint64(seen) {
+			t.Fatalf("row %d of v_source carries read_order %d (%s): the file "+
+				"is not in the order the run read the evidence", seen, order, id)
+		}
+		if want := provenance.SourceID(order); id != want {
+			t.Fatalf("row %d has id %q for sequence %d, want %q",
+				seen, id, order, want)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if seen != count {
+		t.Fatalf("v_source returned %d rows, want %d", seen, count)
 	}
 }
