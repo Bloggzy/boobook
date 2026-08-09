@@ -79,6 +79,14 @@ var exports = []exportSpec{
 	// exported beside it rather than instead of it.
 	{"data/timeline.csv", "v_timeline", "csv"},
 	{"data/timeline-significant.csv", "v_timeline_significant", "csv"},
+	// The report gathers the records that evidence one connection under that
+	// connection and folds them. Both halves of the grouping are exported, or
+	// the report shows a summary an analyst cannot take apart: the moments with
+	// what each rests on, and the entry-to-moment membership with how far each
+	// record sat from the endpoint it was gathered under.
+	{"data/timeline-moments.csv", "v_timeline_moment", "csv"},
+	{"data/timeline-moment-support.csv", "v_timeline_moment_support", "csv"},
+	{"data/timeline-moment-members.csv", "v_timeline_moment_member", "csv"},
 	// What the parsers could not read inside records that otherwise parsed,
 	// by artefact and reason. Held only on the rows themselves, a run could
 	// report one warning with hundreds of partial parses behind it.

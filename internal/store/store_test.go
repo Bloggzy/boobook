@@ -5099,3 +5099,252 @@ func TestADepartureCandidateIsCorroboratedAcrossTheDevicesOwnDevnodes(t *testing
 			"candidate says nothing corroborates it")
 	}
 }
+
+// arrivalWithManyRecords builds the shape a real plug-in leaves: several
+// channels reporting one arrival, and registry keys whose four lifecycle dates
+// all carry that same instant. It is the shape that put twenty-nine rows on the
+// report for one event.
+func arrivalWithManyRecords(t *testing.T, store *Store) {
+	t.Helper()
+
+	identity := `USB\VID_0781&PID_5581\0401B570C537`
+	arrival := at("2026-07-26T10:00:00Z")
+
+	node := usbNode("VID_0781&PID_5581", "0401B570C537", "SanDisk", "08", "USBSTOR")
+	node.KeyLastWriteUTC = &arrival
+	node.Activity = registry.Activity{
+		FirstInstallDate: &arrival,
+		InstallDate:      &arrival,
+		LastArrivalDate:  &arrival,
+	}
+	if err := store.LoadDevnodes("src-hive", []registry.Devnode{node}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.LoadEvents(map[string]string{"state.evtx": "src-1"},
+		[]eventlog.Record{
+			stateEvent(1, "Microsoft-Windows-Kernel-PnP/Configuration", 400,
+				eventlog.KindConnect, identity, arrival, ""),
+			stateEvent(2, "Microsoft-Windows-StorageVolume/Operational", 1001,
+				eventlog.KindConnect, identity, arrival.Add(2*time.Second), ""),
+			stateEvent(3, "Microsoft-Windows-Kernel-PnP/Configuration", 410,
+				eventlog.KindOther, identity, arrival.Add(3*time.Second), ""),
+			stateEvent(4, "Microsoft-Windows-StorageVolume/Operational", 1002,
+				eventlog.KindDisconnect, identity, at("2026-07-26T10:30:00Z"), ""),
+		}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func momentsFor(t *testing.T, store *Store) ([]TimelineRow, map[int][]TimelineRow) {
+	t.Helper()
+	consolidate(t, store)
+	rows, _, err := store.SignificantTimeline(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, err := store.TimelineMomentMembers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows, members
+}
+
+// One arrival is one thing that happened and a great many records of it: the
+// PnP configure and start, the StorageVolume mount, and four registry dates
+// that all carry the same instant. Listed one per row they read as a page of
+// duplicates, because the page shows time to the second and they land inside
+// one — on real evidence, twenty-nine rows over twenty distinct instants sixty
+// milliseconds apart.
+//
+// So the report shows the arrival, and the records it rests on go beneath it.
+func TestOneArrivalIsOneRowWithItsRecordsBeneathIt(t *testing.T) {
+	store := open(t)
+	arrivalWithManyRecords(t, store)
+
+	rows, members := momentsFor(t, store)
+
+	var moments []TimelineRow
+	for _, row := range rows {
+		if row.RowKind == "moment" && row.Event == "device_connected" {
+			moments = append(moments, row)
+		}
+	}
+	if len(moments) != 1 {
+		t.Fatalf("got %d arrival moments, want 1: one plug-in is one moment",
+			len(moments))
+	}
+
+	moment := moments[0]
+	// The connection window, three event records and four registry dates.
+	if moment.MemberCount < 6 {
+		t.Errorf("the moment gathered %d records; the arrival leaves the "+
+			"connection window, three event records and four registry dates",
+			moment.MemberCount)
+	}
+	if len(members[moment.MomentID]) != moment.MemberCount {
+		t.Errorf("the summary counts %d records and the fold holds %d: a "+
+			"reader who opens it has to see exactly what was counted",
+			moment.MemberCount, len(members[moment.MomentID]))
+	}
+	if !moment.FirstInstallRecorded {
+		t.Error("the arrival carries the registry's first-install date, which " +
+			"makes it the first time this device was seen on this host — the " +
+			"sort of finding that must not need a disclosure to reach")
+	}
+	if moment.Supporting == "" {
+		t.Error("a summary that says how many records support it and cannot " +
+			"say what they were is a number the reader has to take on trust")
+	}
+}
+
+// The safety property, and the reason a moment is allowed to exist at all: it
+// absorbs what evidences the connection and never what evidences use of the
+// device.
+//
+// A file opened in the second a stick was plugged in is the finding an analyst
+// came for. Folding it into "this device was connected" would bury the one row
+// on the page that matters, under a summary describing records of two entirely
+// different kinds as though they were one event.
+func TestAFileOpenedAsADeviceArrivedIsNotFoldedIntoTheArrival(t *testing.T) {
+	store := open(t)
+	arrivalWithManyRecords(t, store)
+
+	if err := store.LoadTimeZone("src-hive", "ControlSet001", perthZone()); err != nil {
+		t.Fatal(err)
+	}
+	// A shortcut, because it states the drive type itself and so reaches the
+	// device without a mount table: an unattributed file record is refused by
+	// the membership before the category rule is ever consulted, and a test
+	// resting on one would hold nothing.
+	//
+	// Opened one second into the arrival, which is the case this exists for.
+	opened := at("2026-07-26T10:00:01Z")
+	target := removableTarget("E", "1A2B3C4D", "FIELDWORK", `E:\stolen.docx`)
+	target.SourceModifiedUTC = &opened
+	if err := store.LoadFileTargets([]FileTarget{target}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, members := momentsFor(t, store)
+
+	// Asserted first, because the interesting claim below is a negative and a
+	// negative over an empty set is free. The bag has to have produced a file
+	// record inside the moment's tolerance before "it was not absorbed" says
+	// anything at all.
+	entries, err := store.Timeline(false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var candidate *TimelineEntry
+	for index, entry := range entries {
+		if entry.Category == "file" {
+			candidate = &entries[index]
+		}
+	}
+	if candidate == nil {
+		t.Fatal("the fixture produced no file record, so this test would " +
+			"pass without the rule it exists to hold")
+	}
+
+	for _, list := range members {
+		for _, member := range list {
+			if member.Category == "file" {
+				t.Errorf("a file record (%s, entry %d) was folded into a "+
+					"connection moment: it records what was done with the "+
+					"device, not that the device arrived",
+					member.Event, member.EntryID)
+			}
+			if member.EntryID == candidate.EntryID {
+				t.Errorf("entry %d is the file record and was folded into a "+
+					"moment", member.EntryID)
+			}
+		}
+	}
+}
+
+// Nothing is lost to the grouping. Every record the report would have listed is
+// either still listed or inside exactly one fold — never both, and never
+// neither.
+//
+// This is the claim the whole design rests on, and the one whose failure would
+// be invisible: a summary that quietly dropped a record leaves a page that is
+// simply shorter, with nothing on it to say so.
+func TestNoTimelineRecordIsLostToAMoment(t *testing.T) {
+	store := open(t)
+	arrivalWithManyRecords(t, store)
+	if err := store.LoadTimeZone("src-hive", "ControlSet001", perthZone()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.LoadShellBags("src-hive",
+		[]registry.ShellBag{bagAt(`E:\stolen`, "2026-07-26 18:00:01")}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, members := momentsFor(t, store)
+
+	seen := map[int]int{}
+	for _, row := range rows {
+		if row.RowKind == "entry" {
+			seen[row.EntryID]++
+		}
+	}
+	for _, list := range members {
+		for _, member := range list {
+			seen[member.EntryID]++
+		}
+	}
+
+	entries, err := store.Timeline(true, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("the fixture produced no significant timeline to check")
+	}
+	for _, entry := range entries {
+		switch seen[entry.EntryID] {
+		case 1:
+		case 0:
+			t.Errorf("entry %d (%s %s) reaches neither the list nor a fold",
+				entry.EntryID, entry.Category, entry.Event)
+		default:
+			t.Errorf("entry %d appears %d times: a record folded into a "+
+				"moment and listed beside it is counted twice by any reader",
+				entry.EntryID, seen[entry.EntryID])
+		}
+	}
+}
+
+// A moment needs two records before it is worth making. Replacing one record
+// with a summary of that record, plus a disclosure to open before the record
+// can be read, is strictly worse than leaving it where it was — and it would
+// happen on every quiet host, which is most of them.
+func TestASingleRecordIsNotReplacedByASummaryOfItself(t *testing.T) {
+	store := open(t)
+
+	// One arrival and one removal, each reported by a single channel, with no
+	// registry evidence and nothing else near either.
+	identity := `USB\VID_0781&PID_5581\0401B570C537`
+	if err := store.LoadEvents(map[string]string{"state.evtx": "src-1"},
+		[]eventlog.Record{
+			stateEvent(1, "Microsoft-Windows-StorageVolume/Operational", 1001,
+				eventlog.KindConnect, identity, at("2026-07-26T10:00:00Z"), ""),
+			stateEvent(2, "Microsoft-Windows-StorageVolume/Operational", 1002,
+				eventlog.KindDisconnect, identity, at("2026-07-26T10:30:00Z"), ""),
+		}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, members := momentsFor(t, store)
+
+	for _, row := range rows {
+		if row.RowKind == "moment" {
+			t.Errorf("a moment was made for %d record(s): the connection row "+
+				"already said this, and now says it behind a fold",
+				row.MemberCount)
+		}
+	}
+	if len(members) != 0 {
+		t.Errorf("got %d moments holding members, want none", len(members))
+	}
+}

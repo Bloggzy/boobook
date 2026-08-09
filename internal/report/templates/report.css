@@ -392,6 +392,29 @@ td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
     padding: .5rem 0;
     border-bottom: 1px solid var(--rule);
 }
+/* A moment stands for the records folded under it, so its own row and that fold
+   have to read as one block. A left rule does it without a box: a box around
+   every arrival would turn the list into a stack of panels, which is the shape
+   the file activity section was rebuilt out of.
+
+   The row keeps the two-column grid every other row uses — the extra blocks are
+   placed in the second column rather than left to auto-place, or the breakdown
+   lands under the timestamp and the times stop lining up down the page. */
+.entry.moment {
+    border-left: 3px solid var(--accent);
+    padding-left: .75rem;
+}
+.entry.moment > .moment-support,
+.entry.moment > .moment-records { grid-column: 2; }
+.moment-support { font-size: .82rem; }
+.moment-first { font-weight: 600; }
+.moment-breakdown { opacity: .75; }
+/* Nested rows are the evidence for the summary above them, so they are set
+   quieter and without the outer list's top rule, which would otherwise draw a
+   line across the fold and read as the start of a new section. */
+.timeline-entries.nested { border-top: 0; font-size: .95em; }
+.timeline-entries.nested > .entry:last-child { border-bottom: 0; }
+
 .entry-when {
     display: flex;
     flex-wrap: wrap;
@@ -513,8 +536,13 @@ footer {
     h2 { break-after: avoid; }
     /* .run joined these when the executions stopped being table rows: a
        programme split across a page break loses the tie between its name and
-       the files it read. */
-    .finding, tr, .run { break-inside: avoid; }
+       the files it read. A moment is the same shape of tie: the summary says
+       what its folded records amount to, and split from them it is an
+       assertion with its evidence on another page. Only the nested rows are
+       exempt — a thirty-record arrival cannot fit on one page and forcing it
+       to try would leave most of a sheet blank. */
+    .finding, tr, .run, .entry.moment > .entry-body { break-inside: avoid; }
+    .entry.moment { break-before: auto; }
 
     /* Print ignores the filter. A printed report that silently omitted the
        rows a reader had filtered out would be a report that lies by omission,

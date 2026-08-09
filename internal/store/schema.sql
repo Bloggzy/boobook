@@ -704,3 +704,22 @@ CREATE TABLE file_attribution (
     contradicted       BOOLEAN,
     source_id          VARCHAR
 );
+
+-- Which timeline entries were gathered under which connection moment. Here for
+-- the same reason as the two above: the membership is a join of the whole
+-- timeline against every connection endpoint, and four readers want the answer
+-- — the merged report timeline, the members inside each fold, the moment
+-- summary and the export. Computed per reader it costs several passes over the
+-- most expensive view in the schema.
+--
+-- The reasoning lives in v_timeline_moment_member_computed, so there is still
+-- one place where membership is decided.
+CREATE TABLE timeline_moment_member (
+    entry_id    BIGINT,
+    moment_id   BIGINT,
+    -- How far the record sits from the connection endpoint it was gathered
+    -- under. Kept because it is the evidence for the grouping: a reader who
+    -- wants to know why a record was folded into an arrival can see how close
+    -- to it the record actually was.
+    distance_ms BIGINT
+);

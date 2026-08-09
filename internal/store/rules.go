@@ -170,6 +170,10 @@ func (s *Store) Consolidate() error {
 		// connection windows, which depend on nothing above, but the order is
 		// fixed so a reader does not have to work out that it is free.
 		{"file_attribution", "v_file_attribution_computed"},
+		// Last, and the order is not free here: the membership joins the whole
+		// timeline against every connection endpoint, and the timeline reads
+		// the attribution above it.
+		{"timeline_moment_member", "v_timeline_moment_member_computed"},
 	}
 
 	for _, step := range steps {

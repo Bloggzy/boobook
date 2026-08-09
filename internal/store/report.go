@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -146,19 +147,79 @@ func (s *Store) Findings() ([]Finding, error) {
 	return findings, rows.Err()
 }
 
+// TimelineRow is one row of the timeline as the report renders it: either a
+// record, or one connection moment standing for the records it gathered.
+//
+// The two are one type because they are one list, and the view decides where
+// each sits in it. A moment carries what a record does — a time, a device, a
+// source to cite — plus what only a moment has: how many records stand behind
+// it and what they were.
+type TimelineRow struct {
+	TimelineEntry
+	// RowKind is "entry" or "moment".
+	RowKind string
+	// MomentID identifies the moment, and is zero on a record.
+	MomentID int
+	// MemberCount is how many records the moment gathered, and Supporting is
+	// what they were, counted by event. Zero and empty on a record.
+	MemberCount int
+	Supporting  string
+	// FirstInstallRecorded marks a moment that gathered the registry's
+	// first-install date, which makes it the first time this device was seen on
+	// this host. Promoted out of the fold because a reader must not have to open
+	// a disclosure to find it.
+	FirstInstallRecorded bool
+}
+
+const timelineRowColumns = `
+        row_kind, moment_id, entry_id, sort_utc, time_utc, time_utc_alt,
+        time_local, time_basis, time_ambiguous, epoch_default,
+        category, event, meaning, device_key, physical_device_id, device_label,
+        drive_letter, path, profile, confidence, artefact, detail,
+        source_id, source_path, member_count, supporting, first_install_recorded`
+
+func scanTimelineRows(rows *sql.Rows) ([]TimelineRow, error) {
+	var out []TimelineRow
+	for rows.Next() {
+		var r TimelineRow
+		if err := rows.Scan(&r.RowKind, &r.MomentID, &r.EntryID, &r.SortUTC,
+			&r.TimeUTC, &r.TimeUTCAlt, &r.TimeLocal, &r.TimeBasis,
+			&r.TimeAmbiguous, &r.EpochDefault, &r.Category, &r.Event, &r.Meaning,
+			&r.DeviceKey, &r.PhysicalDeviceID, &r.DeviceLabel, &r.DriveLetter,
+			&r.Path, &r.Profile, &r.Confidence, &r.Artefact, &r.Detail,
+			&r.SourceID, &r.SourcePath, &r.MemberCount, &r.Supporting,
+			&r.FirstInstallRecorded); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // SignificantTimeline reads the timeline the report shows, oldest first, and
-// reports how many entries the view holds in total.
+// reports how many rows the view holds in total.
 //
 // The total comes back even when the rows are capped, because a section that
 // quietly shows the first few hundred of several thousand entries is a section
 // that misleads about the shape of the case. The renderer says how many it left
-// out, and every entry is in the exported file either way.
+// out, and every record is in the exported files either way.
 func (s *Store) SignificantTimeline(limit int) (
-	entries []TimelineEntry, total int, err error) {
+	entries []TimelineRow, total int, err error) {
 
-	entries, err = s.Timeline(true, limit)
+	statement := `SELECT ` + timelineRowColumns +
+		` FROM v_report_timeline ORDER BY sort_utc NULLS LAST, entry_id, row_kind`
+	if limit > 0 {
+		statement += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.db.Query(statement)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("report timeline: %w", err)
+	}
+	defer rows.Close()
+
+	entries, err = scanTimelineRows(rows)
+	if err != nil {
+		return nil, 0, fmt.Errorf("report timeline: %w", err)
 	}
 	// Short of the limit, the rows are the total, and counting again would mean
 	// evaluating the timeline and the classification behind it a second time for
@@ -167,10 +228,43 @@ func (s *Store) SignificantTimeline(limit int) (
 		return entries, len(entries), nil
 	}
 	if err := s.db.QueryRow(
-		`SELECT count(*) FROM v_timeline_significant`).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("significant timeline count: %w", err)
+		`SELECT count(*) FROM v_report_timeline`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("report timeline count: %w", err)
 	}
 	return entries, total, nil
+}
+
+// TimelineMomentMembers reads the records inside every moment's fold, keyed by
+// moment.
+//
+// Read in one query rather than one per moment: a host with a hundred
+// connections would otherwise evaluate the timeline a hundred times, and the
+// whole reason the membership is consolidated into a table is that the timeline
+// is the most expensive view in the schema.
+func (s *Store) TimelineMomentMembers() (map[int][]TimelineRow, error) {
+	rows, err := s.db.Query(`
+        SELECT 'entry' AS row_kind, moment_id, entry_id, sort_utc, time_utc,
+               time_utc_alt, time_local, time_basis, time_ambiguous,
+               epoch_default, category, event, meaning, device_key,
+               physical_device_id, device_label, drive_letter, path, profile,
+               confidence, artefact, detail, source_id, source_path,
+               0 AS member_count, '' AS supporting,
+               false AS first_install_recorded
+        FROM v_report_timeline_member`)
+	if err != nil {
+		return nil, fmt.Errorf("timeline moment members: %w", err)
+	}
+	defer rows.Close()
+
+	members, err := scanTimelineRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("timeline moment members: %w", err)
+	}
+	byMoment := map[int][]TimelineRow{}
+	for _, member := range members {
+		byMoment[member.MomentID] = append(byMoment[member.MomentID], member)
+	}
+	return byMoment, nil
 }
 
 // CardDevice is one physical device as the report presents it.

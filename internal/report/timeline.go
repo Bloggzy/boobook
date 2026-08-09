@@ -21,8 +21,13 @@ const TimelineLimit = 750
 // drew, in what order — rather than of the evidence, which is why it is the
 // only thing assigned here.
 type TimelineRow struct {
-	store.TimelineEntry
+	store.TimelineRow
 	DeviceIndex int
+	// Members are the records a moment gathered, rendered inside its fold. Empty
+	// on an ordinary row, and on a moment they are the whole of what it rests
+	// on: the summary above them is a statement about these records and nothing
+	// else, so a reader who opens the fold sees exactly what was counted.
+	Members []TimelineRow
 	// Name is what the row calls the thing it concerns: the file for a file
 	// record, and otherwise the device under the same name its filter chip
 	// carries. Three sticks of one model would otherwise produce three rows a
@@ -86,6 +91,10 @@ func gatherTimeline(db *store.Store) (Timeline, error) {
 	if err != nil {
 		return Timeline{}, err
 	}
+	members, err := db.TimelineMomentMembers()
+	if err != nil {
+		return Timeline{}, err
+	}
 	zone, _, _, _, found, err := db.HostTimeZone()
 	if err != nil {
 		return Timeline{}, err
@@ -108,17 +117,22 @@ func gatherTimeline(db *store.Store) (Timeline, error) {
 		}
 		timeline.Filters[position-1].Count++
 
-		timeline.Rows = append(timeline.Rows,
-			TimelineRow{TimelineEntry: entry, DeviceIndex: position})
+		row := TimelineRow{TimelineRow: entry, DeviceIndex: position}
+		for _, member := range members[entry.MomentID] {
+			// A member's chip index is its moment's: it is the same device, and
+			// the filter has to hide a fold's contents with the fold.
+			row.Members = append(row.Members,
+				TimelineRow{TimelineRow: member, DeviceIndex: position})
+		}
+		timeline.Rows = append(timeline.Rows, row)
 
-		if entry.TimeBasis != "recorded_utc" {
-			timeline.WallClock++
-		}
-		if entry.TimeAmbiguous {
-			timeline.Ambiguous++
-		}
-		if entry.EpochDefault != "" {
-			timeline.EpochDefault++
+		// Counted over the folded records too. They are on the page — the print
+		// stylesheet forces every fold open — so a count of what rests on a
+		// converted wall clock that ignored them would understate the part of
+		// the document it exists to qualify.
+		timeline.count(row)
+		for _, member := range row.Members {
+			timeline.count(member)
 		}
 	}
 
@@ -126,16 +140,39 @@ func gatherTimeline(db *store.Store) (Timeline, error) {
 	// the same thing about the same device.
 	for position := range timeline.Rows {
 		row := &timeline.Rows[position]
-		row.Device = timeline.Filters[row.DeviceIndex-1].Label
-		row.Name = row.Label()
-		if row.DeviceLabel != "" && row.Name == row.DeviceLabel {
-			row.Name = row.Device
+		row.name(timeline.Filters[row.DeviceIndex-1].Label)
+		for member := range row.Members {
+			row.Members[member].name(timeline.Filters[row.DeviceIndex-1].Label)
 		}
 	}
 	return timeline, nil
 }
 
-func timelineFilterLabel(entry store.TimelineEntry) string {
+func (t *Timeline) count(row TimelineRow) {
+	if row.TimeBasis != "recorded_utc" {
+		t.WallClock++
+	}
+	if row.TimeAmbiguous {
+		t.Ambiguous++
+	}
+	if row.EpochDefault != "" {
+		t.EpochDefault++
+	}
+}
+
+func (r *TimelineRow) name(device string) {
+	r.Device = device
+	r.Name = r.Label()
+	if r.DeviceLabel != "" && r.Name == r.DeviceLabel {
+		r.Name = r.Device
+	}
+}
+
+// IsMoment reports whether the row stands for the records it gathered rather
+// than being one of them.
+func (r TimelineRow) IsMoment() bool { return r.RowKind == "moment" }
+
+func timelineFilterLabel(entry store.TimelineRow) string {
 	switch {
 	case entry.DeviceLabel != "":
 		return entry.DeviceLabel

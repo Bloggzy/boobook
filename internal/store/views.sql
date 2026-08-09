@@ -4498,6 +4498,318 @@ JOIN v_device_classification c
 WHERE c.tier <= 2
 ORDER BY t.sort_utc NULLS LAST, t.category, t.event, t.entry_id;
 
+-- ---- timeline moments ------------------------------------------------------
+--
+-- One arrival is recorded many times over, and the timeline listed every record
+-- separately. On USB-LENOVO-Multi-USBs, GEN32GBF32 arriving at 2026-08-04
+-- 02:07:06 put twenty-nine rows on the page — at twenty distinct instants inside
+-- sixty milliseconds, which the page then rendered as one repeated second, so
+-- they read as duplicates of one another when they are not.
+--
+-- Twenty-four of the twenty-nine are one claim repeated per devnode: four
+-- registry lifecycle values and two Kernel-PnP records, each recorded against
+-- USB, USBSTOR, STORAGE\Volume and SWD\WPDBUSENUM. The standing rule is
+-- physical devices, not devnodes, and the grouping honours it everywhere else;
+-- the timeline was unrolling the group back out one record at a time. The
+-- remaining five each say something the others do not — the StorageVolume
+-- mount, the setupapi install section, the partition driver's inventory, the
+-- disk layout and PnP 430.
+--
+-- So the records that evidence a connection are gathered under the connection
+-- they evidence, and the report states the conclusion with the records folded
+-- beneath it. Nothing is dropped and nothing is decided in Go: every record is
+-- still in timeline.csv under its own id, the membership is exported beside it,
+-- and the fold is a checkbox the print stylesheet forces open.
+--
+-- Two things bound what a moment is allowed to absorb.
+--
+-- It is anchored on a connection window rather than on a clock bucket.
+-- v_connection has already decided which records constitute one arrival,
+-- against a tolerance calibrated on real evidence, and a second independent
+-- bucket here would be a second number to defend — with the first already the
+-- thinnest calibration in this file. The same fifteen seconds is reused. It is
+-- not load-bearing at this level: on the reference collection a tolerance of
+-- one second gathers 134 records and thirty seconds gathers 152, because the
+-- records genuinely arrive together. That flatness is why reusing the number is
+-- safe here and why choosing a new one would have been arbitrary.
+--
+-- And a moment absorbs only what evidences the connection itself, never what
+-- evidences use of the device. A file opened in the second a stick was plugged
+-- in is the finding an analyst came for, and folding it into "device connected"
+-- would bury the one row on the page that matters. The categories are listed
+-- affirmatively rather than excluded, so a category added later sits outside a
+-- moment until somebody decides otherwise — the safe direction, because the
+-- cost of leaving a record on the page is a longer list and the cost of
+-- absorbing the wrong one is a finding nobody sees.
+
+-- The endpoints a moment can be anchored on: an arrival, and a removal.
+--
+-- Keyed on the physical device rather than on the devnode the window was
+-- recorded against. The records being gathered are spread across every devnode
+-- the device enumerates under, and the window is recorded against one of them,
+-- so joining on the devnode would gather a quarter of them and leave the rest
+-- on the page looking exactly as they do now.
+CREATE VIEW v_connection_endpoint AS
+SELECT g.physical_device_id,
+       'arrival'      AS moment_kind,
+       c.started_utc  AS moment_utc,
+       c.device_key,
+       c.opened_by    AS moment_rule
+FROM v_connection c
+JOIN v_device_group g USING (device_key)
+WHERE c.started_utc IS NOT NULL AND c.start_known
+UNION ALL
+SELECT g.physical_device_id, 'removal', c.ended_utc, c.device_key, c.closed_by
+FROM v_connection c
+JOIN v_device_group g USING (device_key)
+WHERE c.ended_utc IS NOT NULL;
+
+-- One anchor per arrival or removal of a physical device.
+--
+-- Endpoints are clustered before they are used, with the same tolerance and for
+-- the same reason v_connection clusters state changes: two devnodes of one
+-- device can each carry a window, and two anchors a few milliseconds apart
+-- would split one arrival's records into two folds that both claim to be the
+-- arrival. No reference collection shows that shape — every window on all five
+-- is recorded against the USBSTOR key alone — which is exactly why it is worth
+-- handling here rather than discovering later on a host that does.
+CREATE VIEW v_timeline_moment_anchor AS
+WITH ordered AS (
+    SELECT *, lag(moment_utc) OVER w AS previous_utc
+    FROM v_connection_endpoint
+    WINDOW w AS (PARTITION BY physical_device_id, moment_kind
+                 ORDER BY moment_utc, device_key)
+),
+clustered AS (
+    SELECT *,
+           sum(CASE WHEN previous_utc IS NULL
+                     OR date_diff('millisecond', previous_utc, moment_utc) > 15000
+                    THEN 1 ELSE 0 END) OVER (
+               PARTITION BY physical_device_id, moment_kind
+               ORDER BY moment_utc, device_key
+               ROWS UNBOUNDED PRECEDING) AS cluster_index
+    FROM ordered
+)
+SELECT
+    row_number() OVER (ORDER BY physical_device_id, moment_kind, cluster_index)
+                                          AS moment_id,
+    physical_device_id,
+    moment_kind,
+    min(moment_utc)                       AS moment_utc,
+    count(*)                              AS window_count,
+    string_agg(DISTINCT moment_rule, '; ' ORDER BY moment_rule) AS moment_rules
+FROM clustered
+GROUP BY physical_device_id, moment_kind, cluster_index;
+
+-- Which timeline entry belongs to which moment.
+--
+-- A record within the tolerance of two anchors — a device connected and removed
+-- inside fifteen seconds — goes to the nearer, and to the lower moment id where
+-- it is equidistant. The tie-break is arbitrary and is written down rather than
+-- left to the plan, because a record that changed folds between two runs would
+-- change the report's own hash.
+--
+-- A record whose time is a format's zero is never gathered. Its distance from
+-- an anchor is a distance from a placeholder, and proximity is the whole of the
+-- evidence for membership here.
+CREATE VIEW v_timeline_moment_member_computed AS
+WITH candidate AS (
+    SELECT t.entry_id,
+           a.moment_id,
+           abs(date_diff('millisecond', a.moment_utc, t.sort_utc)) AS distance_ms
+    FROM v_timeline t
+    JOIN v_timeline_moment_anchor a
+      ON a.physical_device_id = t.physical_device_id
+    WHERE t.sort_utc IS NOT NULL
+      AND t.physical_device_id <> ''
+      AND t.epoch_default = ''
+      AND t.category IN ('connection', 'device', 'device_state', 'install', 'disk')
+      AND abs(date_diff('millisecond', a.moment_utc, t.sort_utc)) <= 15000
+),
+nearest AS (
+    SELECT entry_id, moment_id, distance_ms,
+           row_number() OVER (PARTITION BY entry_id
+                              ORDER BY distance_ms, moment_id) AS choice
+    FROM candidate
+)
+SELECT entry_id, moment_id, distance_ms
+FROM nearest
+WHERE choice = 1;
+
+-- What everything downstream reads, filled by the consolidation step.
+--
+-- entry_id is unique here — a record belongs to at most one moment — so the
+-- order is total and the exported file is the same bytes every run.
+CREATE VIEW v_timeline_moment_member AS
+SELECT entry_id, moment_id, distance_ms
+FROM timeline_moment_member
+ORDER BY moment_id, entry_id;
+
+-- What each moment rests on, one row per kind of record it gathered. Exported
+-- as its own file: a summary that says "29 records" and cannot be broken down
+-- is a number an analyst has to take on trust.
+CREATE VIEW v_timeline_moment_support AS
+SELECT m.moment_id,
+       t.category,
+       t.event,
+       count(*)                      AS records,
+       -- Identities rather than devnodes, and the distinction is not pedantry:
+       -- this stick's four registry keys — USB, USBSTOR, STORAGE\Volume and
+       -- SWD\WPDBUSENUM — normalise to two device identities, so a row saying
+       -- "across 4 devnodes" and a row saying "across 2" would both be true of
+       -- the same records and neither would say which was being counted.
+       -- device-identities.csv is the file this number can be checked against.
+       count(DISTINCT t.device_key)  AS identities,
+       string_agg(DISTINCT t.artefact, ', ' ORDER BY t.artefact) AS artefacts
+FROM v_timeline_moment_member m
+JOIN v_timeline t USING (entry_id)
+GROUP BY m.moment_id, t.category, t.event
+ORDER BY m.moment_id, t.category, t.event;
+
+-- The moment as one row.
+--
+-- A moment needs two records before it is worth making. Replacing a single
+-- record with a summary of that record plus a fold to open is strictly worse
+-- than leaving the record where it was, and the HAVING is what keeps every
+-- connection on a quiet host reading exactly as it did.
+CREATE VIEW v_timeline_moment AS
+WITH member AS (
+    SELECT m.moment_id, m.distance_ms, t.*
+    FROM v_timeline_moment_member m
+    JOIN v_timeline t USING (entry_id)
+),
+support AS (
+    SELECT moment_id,
+           string_agg(
+               records || ' ' || event
+                       || CASE WHEN identities > 1
+                               THEN ' across ' || identities || ' identities'
+                               ELSE '' END,
+               '; ' ORDER BY records DESC, event) AS supporting
+    FROM v_timeline_moment_support
+    GROUP BY moment_id
+)
+SELECT
+    a.moment_id,
+    a.physical_device_id,
+    a.moment_kind,
+    a.moment_utc,
+    a.moment_rules,
+    -- The moment takes the identity of its earliest record, so a citation to it
+    -- lands on a row that exists in timeline.csv.
+    min(x.entry_id)                        AS entry_id,
+    count(*)                               AS member_count,
+    count(DISTINCT x.device_key)           AS identity_count,
+    count(DISTINCT x.source_id)            AS source_count,
+    max(x.device_label)                    AS device_label,
+    s.supporting,
+    -- Promoted out of the fold, because "this is the first time this device was
+    -- seen on this host" is the sort of thing a reader must not have to open a
+    -- disclosure to find.
+    bool_or(x.event = 'first_install_date') AS first_install_recorded,
+    bool_or(x.artefact = 'setupapi_log')    AS setupapi_recorded,
+    -- The window's own source, so the summary line cites the record that opened
+    -- or closed it rather than whichever member happened to sort first.
+    coalesce(arg_min(x.source_id, x.entry_id)
+                 FILTER (WHERE x.category = 'connection'),
+             arg_min(x.source_id, x.entry_id))   AS source_id,
+    coalesce(arg_min(x.source_path, x.entry_id)
+                 FILTER (WHERE x.category = 'connection'),
+             arg_min(x.source_path, x.entry_id)) AS source_path
+FROM v_timeline_moment_anchor a
+JOIN member x USING (moment_id)
+LEFT JOIN support s USING (moment_id)
+GROUP BY a.moment_id, a.physical_device_id, a.moment_kind, a.moment_utc,
+         a.moment_rules, s.supporting
+HAVING count(*) >= 2
+ORDER BY a.moment_id;
+
+-- The timeline the report renders: every entry that no moment gathered, and one
+-- row for each moment that gathered any.
+--
+-- Merged here rather than in Go. Go may group rows into cards and chips, but
+-- the order two kinds of row appear in among each other is a statement about
+-- the evidence, and a statement about the evidence is a view.
+CREATE VIEW v_report_timeline AS
+SELECT
+    'moment'                     AS row_kind,
+    m.moment_id,
+    m.entry_id,
+    m.moment_utc                 AS sort_utc,
+    -- A connection endpoint comes from an event log record, so it is a recorded
+    -- UTC instant and never a converted wall clock. Stated rather than carried
+    -- from a member, whose time may be either.
+    m.moment_utc                 AS time_utc,
+    CAST(NULL AS TIMESTAMP)      AS time_utc_alt,
+    ''                           AS time_local,
+    'recorded_utc'               AS time_basis,
+    false                        AS time_ambiguous,
+    ''                           AS epoch_default,
+    'connection'                 AS category,
+    CASE m.moment_kind WHEN 'arrival' THEN 'device_connected'
+                       ELSE 'device_removed' END AS event,
+    CASE m.moment_kind
+         WHEN 'arrival' THEN 'this device was connected to the machine'
+         ELSE 'this device was removed from the machine' END
+      || ', and ' || m.member_count || ' records evidence it'
+      || CASE WHEN m.identity_count > 1
+              THEN ', across ' || m.identity_count
+                   || ' of the identities this device enumerates under'
+              ELSE '' END
+                                 AS meaning,
+    ''                           AS device_key,
+    m.physical_device_id,
+    m.device_label,
+    ''                           AS drive_letter,
+    ''                           AS path,
+    ''                           AS profile,
+    'confirmed'                  AS confidence,
+    'connection_window'          AS artefact,
+    'opened by ' || m.moment_rules AS detail,
+    m.source_id,
+    m.source_path,
+    m.member_count,
+    m.supporting,
+    -- Claimed on an arrival only. A device removed and re-plugged inside the
+    -- tolerance — SAN64FAT32 on USB-LENOVO-Multi-USBs goes out at 11:37:16 and
+    -- comes back at 11:37:17 — puts its install records a second from both
+    -- anchors, and the nearer of the two can be the removal. Which moment
+    -- gathered the record is then close to arbitrary and saying so is fine;
+    -- "this is the first time the device was seen on this host" printed against
+    -- a removal is not, because it reads as a claim about the removal.
+    m.first_install_recorded AND m.moment_kind = 'arrival'
+                                 AS first_install_recorded,
+    c.tier
+FROM v_timeline_moment m
+JOIN v_device_classification c ON c.physical_device_id = m.physical_device_id
+WHERE c.tier <= 2
+
+UNION ALL
+
+SELECT
+    'entry', 0, t.entry_id, t.sort_utc, t.time_utc, t.time_utc_alt,
+    t.time_local, t.time_basis, t.time_ambiguous, t.epoch_default,
+    t.category, t.event, t.meaning, t.device_key, t.physical_device_id,
+    t.device_label, t.drive_letter, t.path, t.profile, t.confidence,
+    t.artefact, t.detail, t.source_id, t.source_path,
+    0, '', false, t.tier
+FROM v_timeline_significant t
+LEFT JOIN v_timeline_moment_member m ON m.entry_id = t.entry_id
+LEFT JOIN v_timeline_moment g       ON g.moment_id = m.moment_id
+WHERE g.moment_id IS NULL
+ORDER BY sort_utc NULLS LAST, entry_id, row_kind;
+
+-- The records inside one moment's fold, in the order they happened.
+CREATE VIEW v_report_timeline_member AS
+-- The moment is tested for with IN rather than joined to: it carries an
+-- entry_id of its own — the identity it took from its earliest record — and
+-- joining it here would put two different entry_ids in scope under one name.
+SELECT m.moment_id, m.distance_ms, t.*
+FROM v_timeline_moment_member m
+JOIN v_timeline t ON t.entry_id = m.entry_id
+WHERE m.moment_id IN (SELECT moment_id FROM v_timeline_moment)
+ORDER BY m.moment_id, t.sort_utc NULLS LAST, t.entry_id;
+
 -- ---- the report ------------------------------------------------------------
 --
 -- The report is a document rather than a data file, so Go renders it. What it

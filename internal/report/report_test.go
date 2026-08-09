@@ -611,8 +611,10 @@ func TestACappedTimelineSaysWhatItLeftOut(t *testing.T) {
 // registry row would say nothing and would teach the reader to skip the chip
 // that matters.
 func TestOnlyAnUncertainLinkIsFlaggedOnATimelineRow(t *testing.T) {
-	certain := TimelineRow{TimelineEntry: store.TimelineEntry{Confidence: "confirmed"}}
-	weak := TimelineRow{TimelineEntry: store.TimelineEntry{Confidence: "probable"}}
+	certain := TimelineRow{TimelineRow: store.TimelineRow{
+		TimelineEntry: store.TimelineEntry{Confidence: "confirmed"}}}
+	weak := TimelineRow{TimelineRow: store.TimelineRow{
+		TimelineEntry: store.TimelineEntry{Confidence: "probable"}}}
 
 	if certain.Uncertain() {
 		t.Error("a confirmed link is flagged as uncertain")

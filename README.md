@@ -131,6 +131,11 @@ extracted, which facts were derived, or which category a rule assigned.
     file-attribution-summary.csv    including those that reached none, and why
     timeline.csv                    every timestamped record
     timeline-significant.csv        the same, filtered to tier 1 and tier 2
+    timeline-moments.csv            one arrival or removal, with the records
+                                    gathered under it and what they were
+    timeline-moment-support.csv     that breakdown, one row per kind of record
+    timeline-moment-members.csv     which record was gathered under which
+                                    moment, and how far it sat from it
   classification/
     rules.csv  weights.csv          the rule set exactly as it was applied
   provenance/
@@ -161,6 +166,18 @@ text is escaped, so a device name cannot become markup.
 Every major section is collapsed when the report opens, so an analyst meets the
 document's shape and chooses where to dig. Each fold's label carries a count or
 the names of what it holds, so a section can be dismissed without being opened.
+
+**One arrival is one row.** Windows records a device being plugged in many times
+over — the PnP configure and start, the volume mount, the setupapi section, and
+four registry dates against each of the keys the device enumerates under — and
+listed one per row that is thirty lines saying the same thing. The timeline
+gathers the records that evidence a connection under the connection they
+evidence, states the conclusion with the breakdown beside it, and folds the
+records beneath. It never gathers a record of *use*: a file opened in the second
+a stick arrived is the finding an analyst came for and stays a row of its own.
+Nothing is dropped — every record keeps its own id in `timeline.csv`, the
+grouping is exported so the summary can be taken apart, and printing opens the
+folds.
 
 Disclosures are hidden checkboxes plus generated CSS rules, not `<details>` — a
 closed `<details>` cannot be forced open by any stylesheet, and the print

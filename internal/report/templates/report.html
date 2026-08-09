@@ -483,62 +483,43 @@
 
   <ol class="timeline-entries filter-targets">
     {{- range .Timeline.Rows}}
-    <li class="entry fx-timeline-{{.DeviceIndex}}" id="entry-{{.EntryID}}">
-      <div class="entry-when">
-        <span class="entry-id mono faint">{{.EntryID}}</span>
-        <span class="mono">{{.When}}</span>
-        <!-- The sentinel case is tested before the other two. A row whose time
-             is the FAT epoch is not a recorded instant and not a converted wall
-             clock; calling it either would be the report agreeing that a
-             placeholder is a measurement. -->
-        {{- if .Sentinel}}
-        <span class="unit epoch">epoch default</span>
-        {{- else if .Recorded}}
-        <span class="unit recorded">UTC</span>
-        {{- else}}
-        <span class="unit converted">local&rarr;UTC</span>
+    <li class="entry{{if .IsMoment}} moment{{end}} fx-timeline-{{.DeviceIndex}}" id="entry-{{.EntryID}}">
+      {{- template "timelinerow" .}}
+      {{- if .IsMoment}}
+      <!-- What the moment rests on, in the open rather than behind the fold. A
+           summary saying "29 records" that cannot be broken down without a
+           click is a number the reader has to take on trust, and the breakdown
+           is one line. The first-install note is here for a stronger reason:
+           that this is the first time the device was seen on this host is a
+           finding in its own right, and it must not need a disclosure. -->
+      <div class="moment-support">
+        {{- if .FirstInstallRecorded}}
+        <div class="moment-first">The registry's first-install date for this device is this moment: this is the first time it was seen on this host.</div>
         {{- end}}
+        {{with .Supporting}}<div class="moment-breakdown mono">{{.}}</div>{{end}}
       </div>
-      <div class="entry-body">
-        <div class="entry-head">
-          <span class="chip cat-{{.Category}}">{{.Category}}</span>
-          <span class="event mono">{{.Event}}</span>
-          <span class="entry-label">{{.Name}}</span>
-          {{- with .DriveLetter}}<span class="chip letter">{{.}}:</span>{{end}}
-          <!-- The confidence is about the tie between the record and the
-               device, not about whether the event happened. Shown only where it
-               is less than certain: on a registry row it is confirmed by
-               construction, and a page of "confirmed" chips both says nothing
-               and invites the wrong reading of the ones that matter.
-
-               It names the device. "probable link to this device" was reported
-               from real evidence as unreadable, and rightly: every other word
-               on a file row is about the file, so "this device" points at
-               nothing the eye has passed. The name is the one the chip above
-               carries, so the row and its filter agree. -->
-          {{- if .Uncertain}}
-          <span class="confidence {{.Confidence}}">{{.Confidence}} link to
-            {{- with .LinkedTo}} {{.}}{{else}} this device{{end}}</span>
-          {{- end}}
-        </div>
-        {{with .Meaning}}<div class="entry-means">{{sentence .}}</div>{{end}}
-        {{with .Qualifier}}<div class="entry-basis">{{.}}</div>{{end}}
-        <!-- Two lines, not one. What the record is and what file it was read
-             from are different questions, and run together they made a single
-             unbroken string an eye has to parse before it can find either. The
-             file is on its own line and every row has one: a device_state row
-             naming only its control set, with no file beside it, read as an
-             assertion nobody could go and check. -->
-        <div class="entry-source faint">
-          <div><span class="mono">{{.Artefact}}</span>
-            {{- with .Detail}} · {{.}}{{end}}</div>
-          {{if .SourcePath}}
-          <div class="mono wrap">{{source .SourcePath}}</div>
-          {{else}}
-          <div class="absent">no source file recorded for this entry</div>
-          {{end}}
+      {{- end}}
+      <!-- The records the moment stands for. A fold rather than a nested list
+           left open: a connection can gather thirty records, and thirty of them
+           under every arrival is the list this section was rebuilt to stop
+           being. It is a checkbox and generated CSS, not a details element, so
+           @media print forces it open and paper carries every record. -->
+      {{- if .Members}}
+      {{$fold := fold}}
+      <div class="disclose fold moment-records">
+        <input class="disclose-toggle" type="checkbox" id="{{$fold}}">
+        <label class="disclose-label" for="{{$fold}}"><span class="disclose-title">The {{len .Members}} records this rests on</span></label>
+        <div class="disclose-body">
+          <ol class="timeline-entries nested">
+            {{- range .Members}}
+            <li class="entry" id="entry-{{.EntryID}}">
+              {{- template "timelinerow" .}}
+            </li>
+            {{- end}}
+          </ol>
         </div>
       </div>
+      {{- end}}
     </li>
     {{- end}}
   </ol>
@@ -1196,4 +1177,62 @@
   Printed with the device filter ignored: everything below is included.
 </p>
 {{- end}}
+{{end}}
+
+{{define "timelinerow"}}
+      <div class="entry-when">
+        <span class="entry-id mono faint">{{.EntryID}}</span>
+        <span class="mono">{{.When}}</span>
+        <!-- The sentinel case is tested before the other two. A row whose time
+             is the FAT epoch is not a recorded instant and not a converted wall
+             clock; calling it either would be the report agreeing that a
+             placeholder is a measurement. -->
+        {{- if .Sentinel}}
+        <span class="unit epoch">epoch default</span>
+        {{- else if .Recorded}}
+        <span class="unit recorded">UTC</span>
+        {{- else}}
+        <span class="unit converted">local&rarr;UTC</span>
+        {{- end}}
+      </div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="chip cat-{{.Category}}">{{.Category}}</span>
+          <span class="event mono">{{.Event}}</span>
+          <span class="entry-label">{{.Name}}</span>
+          {{- with .DriveLetter}}<span class="chip letter">{{.}}:</span>{{end}}
+          <!-- The confidence is about the tie between the record and the
+               device, not about whether the event happened. Shown only where it
+               is less than certain: on a registry row it is confirmed by
+               construction, and a page of "confirmed" chips both says nothing
+               and invites the wrong reading of the ones that matter.
+
+               It names the device. "probable link to this device" was reported
+               from real evidence as unreadable, and rightly: every other word
+               on a file row is about the file, so "this device" points at
+               nothing the eye has passed. The name is the one the chip above
+               carries, so the row and its filter agree. -->
+          {{- if .Uncertain}}
+          <span class="confidence {{.Confidence}}">{{.Confidence}} link to
+            {{- with .LinkedTo}} {{.}}{{else}} this device{{end}}</span>
+          {{- end}}
+        </div>
+        {{with .Meaning}}<div class="entry-means">{{sentence .}}</div>{{end}}
+        {{with .Qualifier}}<div class="entry-basis">{{.}}</div>{{end}}
+        <!-- Two lines, not one. What the record is and what file it was read
+             from are different questions, and run together they made a single
+             unbroken string an eye has to parse before it can find either. The
+             file is on its own line and every row has one: a device_state row
+             naming only its control set, with no file beside it, read as an
+             assertion nobody could go and check. -->
+        <div class="entry-source faint">
+          <div><span class="mono">{{.Artefact}}</span>
+            {{- with .Detail}} · {{.}}{{end}}</div>
+          {{if .SourcePath}}
+          <div class="mono wrap">{{source .SourcePath}}</div>
+          {{else}}
+          <div class="absent">no source file recorded for this entry</div>
+          {{end}}
+        </div>
+      </div>
 {{end}}
