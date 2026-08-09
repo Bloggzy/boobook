@@ -139,7 +139,9 @@ extracted, which facts were derived, or which category a rule assigned.
   classification/
     rules.csv  weights.csv          the rule set exactly as it was applied
   provenance/
-    sources.csv                     every file read, with its hash
+    sources.csv                     every file read, with its hash, in
+                                    read_order — the order the run read them,
+                                    which the source id is not a sort key for
     parse-warnings.csv              what parsed only in part, by reason
     observations.jsonl              every stored value, with its locator
     host-time-zone.csv
