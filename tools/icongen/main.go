@@ -44,19 +44,32 @@ var iconSizes = []int{16, 32, 48, 64, 128, 256}
 // of old shell code paths still reach for the DIB directly.
 const pngThreshold = 256
 
+// webSize is the square the README image is written at, and it is exactly
+// twice the 192 pixels the README displays it at, so it is sharp on a
+// high-density screen and carries nothing beyond that. The source is 1024
+// square and 1.7 MB, which is a lot to make every visitor to the repository
+// page download for a picture shown at a fifth of the width; this is 169 KB.
+//
+// PNG rather than JPEG because the logo is a cut-out: 60% of the source is
+// fully transparent and another 10% is partial, which is what lets it sit on
+// the light and the dark GitHub themes alike. A JPEG would arrive as a black
+// square on the light one.
+const webSize = 384
+
 func main() {
 	in := flag.String("in", "logo/logo.png", "source PNG, square and at least 256x256")
 	ico := flag.String("ico", "logo/boobook.ico", "multi-size icon to write")
 	syso := flag.String("syso", "cmd/boobook/rsrc_windows_amd64.syso", "COFF resource object to write")
+	web := flag.String("web", "logo/boobook-384.png", "downscaled logo for the README")
 	flag.Parse()
 
-	if err := run(*in, *ico, *syso); err != nil {
+	if err := run(*in, *ico, *syso, *web); err != nil {
 		fmt.Fprintf(os.Stderr, "icongen: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(in, icoPath, sysoPath string) error {
+func run(in, icoPath, sysoPath, webPath string) error {
 	src, err := loadPNG(in)
 	if err != nil {
 		return err
@@ -104,7 +117,19 @@ func run(in, icoPath, sysoPath string) error {
 		return err
 	}
 
+	// The README image goes through the same resampler as the icon sizes, so
+	// the picture on the repository page and the one on the taskbar are the
+	// same reduction of the same source rather than two people's exports.
+	webPNG, err := encodePNG(resample(src, webSize))
+	if err != nil {
+		return err
+	}
+	if err := writeFile(webPath, webPNG); err != nil {
+		return err
+	}
+
 	fmt.Printf("wrote %s and %s from %s (%d sizes: %v)\n", icoPath, sysoPath, in, len(images), iconSizes)
+	fmt.Printf("wrote %s (%dx%d, %d KB)\n", webPath, webSize, webSize, len(webPNG)/1024)
 	return nil
 }
 

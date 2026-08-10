@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo/boobook-384.png" alt="Boobook" width="192" height="192">
+</p>
+
 ```
 ====================================================
  ____              __                 __      (o,o)
@@ -384,13 +388,19 @@ counting 0 to 9 before carrying left. The current version lives in
 every report, and should be bumped in the same commit as the change it
 describes.
 
-**The executable's icon** is a committed resource object,
-`cmd/boobook/rsrc_windows_amd64.syso`, built from `logo/logo.png`. Regenerate it
+**Everything derived from the logo is generated, and the generator is
+committed.** `logo/logo.png` is the 1024-square source; from it come
+`cmd/boobook/rsrc_windows_amd64.syso` (the resource object the linker folds
+into the binary, so Explorer shows the owl), `logo/boobook.ico`, and
+`logo/boobook-384.png`, the image at the top of this file. Regenerate all three
 when the logo changes:
 
 ```bash
 go run ./tools/icongen
 ```
+
+A committed binary nobody can reproduce is one nobody can audit, which is why
+the `.syso` has a generator rather than a provenance note.
 
 What is known to be incomplete, and why, is in
 [docs/OPEN-WORK.md](docs/OPEN-WORK.md); read it before assuming a silence in
