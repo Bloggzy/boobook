@@ -146,7 +146,7 @@ behind cgo. The released binary needs none of that.
 | `-output` | output root; results are written to a run directory beneath it |
 | `-working` | scratch root, if it should not sit inside the output |
 | `-keep-working` | keep the scratch directory instead of removing it |
-| `-security` | read `Security.evtx` for logon and logoff records. Off by default: it holds little else of use and costs the size of the file, which a raised log cap can make gigabytes. A run that skipped it says so in the report's limitations |
+| `-security` | read `Security.evtx` for logon and logoff records, off by default |
 | `-case` | case reference, recorded in the manifest |
 | `-examiner` | examiner name, recorded in the manifest |
 | `-host` | label for the host under examination, recorded in the manifest |
@@ -160,6 +160,12 @@ behind cgo. The released binary needs none of that.
 A profile multiplies the weight of the facts it names and leaves the rest at
 1.0. **Reweighting changes placement and score only.** It never changes what was
 extracted, which facts were derived, or which category a rule assigned.
+
+`-security` is off by default because `Security.evtx` holds little else worth
+having and costs the size of the file, which a raised log cap can make
+gigabytes. A run that skipped it says so in the report's limitations, so the
+absence of a logon beside a connection is never mistaken for evidence there
+was none.
 
 ## What a run produces
 
