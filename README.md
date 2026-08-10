@@ -147,7 +147,9 @@ behind cgo. The released binary needs none of that.
 | `-working` | scratch root, if it should not sit inside the output |
 | `-keep-working` | keep the scratch directory instead of removing it |
 | `-security` | read `Security.evtx` for logon and logoff records. Off by default: it holds little else of use and costs the size of the file, which a raised log cap can make gigabytes. A run that skipped it says so in the report's limitations |
-| `-case`, `-examiner`, `-host` | recorded in the manifest |
+| `-case` | case reference, recorded in the manifest |
+| `-examiner` | examiner name, recorded in the manifest |
+| `-host` | label for the host under examination, recorded in the manifest |
 | `-profile` | reweights the relevance score: `general`, `exfiltration`, `printing`, `network-bypass`, `identity`, `ot` |
 | `-rule-set` | a classification rule set file instead of the built-in one |
 | `-no-report` | write only the data files |
