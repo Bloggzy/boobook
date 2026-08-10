@@ -1,8 +1,8 @@
-# Phase 0 — spike results
+# Phase 0: spike results
 
 **Date:** 2026-08-01
 **Verdict:** **GO.** Go + `regparser` + `evtx` + embedded DuckDB is the stack.
-**Code:** `cmd/spike`, `internal/{evidence,registry,eventlog,store}` — as it
+**Code:** `cmd/spike`, `internal/{evidence,registry,eventlog,store}`, as they
 stood on the day. `cmd/spike` was removed once phase 1 replaced it; the four
 `internal` packages are still there and have grown a great deal.
 
@@ -14,7 +14,7 @@ Phase 0 asked four questions. All four are answered.
 
 ---
 
-## 1. Registry parse including transaction-log replay — YES
+## 1. Registry parse including transaction-log replay: YES
 
 `regparser` exposes `RecoverHive(hive, logFiles...)`. It copies the hive, applies
 dirty pages in sequence order, skips a log whose sequence does not follow the
@@ -27,18 +27,18 @@ collections, and correctly reported a sequence mismatch on
        (log starts at sequence number 953, base is already at 958)
 ```
 
-**The risk flagged in the plan was wrong** — this was called the largest
+**The risk flagged in the plan was wrong.** This was called the largest
 technical unknown, and it turned out to be a solved problem in the library.
 
 *Phase 1 follow-up:* `RecoverHive` writes its copy to `os.TempDir()`. It must go
 under the caller's working root instead.
 
-## 2. EVTX at speed — YES
+## 2. EVTX at speed: YES
 
 **~50 MB/s per run**, parsing every EVTX file in the collection with one
 goroutine per file. Zero file-level parse failures across 785 event log files.
 
-## 3. DuckDB holding the result and expressing correlation in SQL — YES
+## 3. DuckDB holding the result and expressing correlation in SQL: YES
 
 Schema loads in ~280 ms for ~1,000 rows. The Phase 0 correlation query joins
 `USBSTOR` devnodes to their USB descriptor identity via shared `ContainerID`,
@@ -48,7 +48,7 @@ The join is the real one, not a toy: a `USBSTOR` key carries SCSI inquiry text
 and never a VID/PID, so the container is the only sound route to the USB
 identity. It resolved correctly on every sample.
 
-## 4. The 60-second gate — PASS, by a factor of 20
+## 4. The 60-second gate: PASS, by a factor of 20
 
 | Collection | Evidence | EVTX files | Records read | USB-relevant | Total |
 |---|---:|---:|---:|---:|---:|
@@ -59,7 +59,7 @@ identity. It resolved correctly on every sample.
 
 Boodie's equivalent work was hour-scale on the event logs alone. There is no
 longer any argument for a triage mode that omits `Security.evtx` and
-`System.evtx` — §6 of the plan can be taken as settled.
+`System.evtx`, and §6 of the plan can be taken as settled.
 
 ---
 
@@ -69,14 +69,14 @@ longer any argument for a triage mode that omits `Security.evtx` and
 
 In `USB-LENOVO-SANDISK`, a SanDisk 3.2Gen1 (`VID_0781&PID_5591`, serial
 `04010d18a394...`) has **15+ event records across five channels** at
-2026-07-26 10:00:06 — Kernel-PnP Configuration, StorageVolume, Partition
-Diagnostic, Storsvc Diagnostic, Kernel-ShimEngine — and **zero rows anywhere in
+2026-07-26 10:00:06 (Kernel-PnP Configuration, StorageVolume, Partition
+Diagnostic, Storsvc Diagnostic, Kernel-ShimEngine) and **zero rows anywhere in
 the SYSTEM hive**, including after transaction-log replay. The same device is
 present in the registry in `USB-LENOVO-SANDISK-LATER`.
 
 The hive snapshot predates the PnP writes; the event logs do not. This is the
 ordinary result of a collector reading artefacts in sequence while the machine
-keeps running, and it appears in **one of our three real collections** — it is
+keeps running, and it appears in **one of our three real collections**, so it is
 not an edge case.
 
 **Consequence:** a registry-first device inventory silently loses devices. The
@@ -99,7 +99,7 @@ which is far more useful than either silence or an unqualified claim.
 
 2. **`EventID` is nested as `{"Value": n}` and arrives at varying integer
    widths.** A type switch over `int64`/`uint64`/`int`/`float64` missed the width
-   actually used and returned 0 for all 852 retained records — indistinguishable
+   actually used and returned 0 for all 852 retained records, indistinguishable
    from a genuine event 0. `toInt` now reads any integer width reflectively.
 
 Both are exactly the class of defect that produces a confident, wrong, empty
@@ -124,5 +124,5 @@ to read that field directly rather than take the library's conversion.
 
 No provenance chain, no hashing, no staging, no discovery of triage-collection
 layouts, no classification, no report. The USB relevance filter is a regex over
-a flattened payload — serviceable for measuring throughput, not the real
+a flattened payload, serviceable for measuring throughput but not the real
 selection logic. All Phase 1.

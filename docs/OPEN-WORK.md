@@ -1,7 +1,7 @@
 # Open work
 
 What is known to be incomplete, and why each item is not done. **These are open,
-not done** — a summary that treats them otherwise is wrong however small the
+not done.** A summary that treats them otherwise is wrong however small the
 remainder looks.
 
 Several of these came out of independent forensic correctness reviews. The most
@@ -19,17 +19,17 @@ readily than a parse failure, because nothing about it looks wrong.
 missing terminator; `parseNetworkShare` does the same for an invalid offset or
 size; the Unicode local base, common suffix and volume label all go through the
 same unchecked reader. So a damaged structure and an absent one produce the same
-output — the confusion `Set.Failures` was written to remove one level up. What it
-needs is every offset-bearing reader returning a status, each refusal carrying
-its own partial-parse warning, and each offset required to lie inside the
-substructure that declared it.
+output, which is the confusion `Set.Failures` was written to remove one level
+up. What it needs is every offset-bearing reader returning a status, each
+refusal carrying its own partial-parse warning, and each offset required to lie
+inside the substructure that declared it.
 
 **The digest and the parse are still two opens.** `Ledger.Reverify` detects a
 source that moved between the hash and the read, and reports it; it does not
 prevent the window. Closing it means either one handle carried through every
-parser, or staging each input under the working root and hashing the staged copy
-— `Workspace.Stage` and `Source.StagedPath` exist for the second and are unused.
-Detection is weaker than prevention and is honest about being so.
+parser, or staging each input under the working root and hashing the staged
+copy. `Workspace.Stage` and `Source.StagedPath` exist for the second and are
+unused. Detection is weaker than prevention and is honest about being so.
 
 A narrower case inside it is worth fixing first: EVTX is parsed *before* its
 initial source hash is taken, so for that one artefact class the two opens are
@@ -47,9 +47,9 @@ an event record and a log line and stops there. Real work rather than a rename.
 **The XP UserAssist record is not decoded.** Its run count carries an offset of
 five, so a naive read reports five extra executions of everything and a genuine
 single run as "not run", and there is no XP evidence here to check a fix against.
-`bookkeeping` no longer stands in the way — it was suppressing `UEME_RUNPATH` and
-its siblings — so decoding the 16-byte record is the only thing between this tool
-and those hosts' execution evidence.
+`bookkeeping` no longer stands in the way; it had been suppressing
+`UEME_RUNPATH` and its siblings. Decoding the 16-byte record is now the only
+thing between this tool and those hosts' execution evidence.
 
 **Classifying a removal from a UMDF record needs one real record.** Events 2003,
 2100 and 2102 are `KindOther`, and the request-code field names are deliberately
@@ -63,15 +63,15 @@ locale-formatted string in the message rather than a field, and no reference
 collection carries a record to check a decoder against. One real record would
 make it a better upper bound on an unclean stop than the boot that reported it.
 
-**Phase 4 — depth.** Tier B sources, the GPT partition chain, `$UsnJrnl`.
+**Phase 4, depth.** Tier B sources, the GPT partition chain, `$UsnJrnl`.
 
 ## Calibrations that would benefit from more evidence
 
 **Resolve the daylight-saving season.** `StandardStart` / `DaylightStart` are
-read, but only `wMonth` — enough to say whether a host changes its clock at all,
-not enough to say which side of a transition a record falls on. Decoding the rest
-of each rule (week, day of week, hour) would resolve most wall-clock timestamps
-to a single reading.
+read, but only `wMonth`, which is enough to say whether a host changes its clock
+at all and not enough to say which side of a transition a record falls on.
+Decoding the rest of each rule (week, day of week, hour) would resolve most
+wall-clock timestamps to a single reading.
 
 Three caveats to design around: the stored rules are current as of collection, so
 applying them to older records is wrong wherever the rules have since changed;
@@ -82,8 +82,8 @@ is itself a finding.
 **Promoting the capacity-zero disk record to a departure.**
 `v_disk_departure_candidate` collects it and closes no window. What is needed
 before it can close one is a collection containing a multi-slot card reader with
-an empty slot — the shape that would make it manufacture removals, since such a
-reader reports zero capacity continuously while never leaving the port — and the
+an empty slot, the shape that would make it manufacture removals, since such a
+reader reports zero capacity continuously while never leaving the port; and the
 same pairing checked on more Windows versions than the one host that shows it
 working. Until then the corroboration column is the whole of what it claims.
 
@@ -94,8 +94,8 @@ thing to look at if a collection ever splits one arrival into two windows or
 folds two connections into one.
 
 **The twenty-four-hour bound on `sole_connected_device` is the second thinnest.**
-The gap it sits in is large — every genuine window on the reference collections
-closes within eleven minutes, and the case it excludes is 262 days — so nothing
+The gap it sits in is large: every genuine window on the reference collections
+closes within eleven minutes, and the case it excludes is 262 days. Nothing
 turns on the exact figure today. What would strain it is a device genuinely left
 attached across a working day with the logs recording nothing in between, where
 the route would go quiet part way through. That reads as under-claiming rather

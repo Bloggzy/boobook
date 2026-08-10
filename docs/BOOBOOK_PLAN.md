@@ -1,9 +1,9 @@
-# Boobook — project plan
+# Boobook: the project plan
 
 **Status:** historical. This is the design record that produced the tool, kept
-because the reasoning in it — why Boodie's architecture was inverted, why
-correlation is labelled rather than gated, why every output is a copy of a view
-— is still the reasoning the tool runs on, and is set out here at more length
+because the reasoning in it (why Boodie's architecture was inverted, why
+correlation is labelled rather than gated, why every output is a copy of a view)
+is still the reasoning the tool runs on, and is set out here at more length
 than anywhere else.
 
 It is **not** a description of the tool as it stands, and it is not the place to
@@ -20,8 +20,8 @@ thought at the time.
 
 ## 1. What Boobook is
 
-A fast, offline, read-only tool that reads a Windows evidence set — a triage
-collection (Velociraptor/KAPE) or a mounted volume — and answers, in one
+A fast, offline, read-only tool that reads a Windows evidence set, either a
+triage collection (Velociraptor/KAPE) or a mounted volume, and answers, in one
 report an analyst can read in five minutes:
 
 > Which USB devices did this machine see, which of them matter, when were they
@@ -55,7 +55,7 @@ into a confidence column and a footnote.
 
 ### 2.2 Purity gating produces empty answers
 
-The highest-value output — drive letter → file activity — is only emitted when
+The highest-value output, drive letter → file activity, is only emitted when
 a complete USBSTOR instance ID is embedded in `MountedDevices`, or an MBR disk
 signature matches. The GPT path is documented as blocked. The `RegistryId` path
 is documented as blocked. Both are blocked on *substantiation*, which is
@@ -101,7 +101,7 @@ mark-of-the-web blocked, and draws EDR attention.
 
 ### Recommendation: Go + embedded DuckDB, single static binary
 
-**Language — Go.**
+**Language: Go.**
 
 - Velociraptor's forensic parsers are Go, Apache-2.0, and proven at scale
   against exactly these artefacts: `regparser` (registry hives), `evtx`,
@@ -115,13 +115,13 @@ mark-of-the-web blocked, and draws EDR attention.
 - It matches the existing stack (Firetail-Go is Go 1.26 + DuckDB + Wails), so
   conventions, build scripts and reviewer familiarity carry across.
 
-**Correlation engine — embedded DuckDB.**
+**Correlation engine: embedded DuckDB.**
 
 Parsers emit rows; correlation is SQL. This follows the established pattern of
 pushing logic into SQL rather than Go loops. Concretely it buys:
 
 - Joins across registry / EVTX / LNK / MountedDevices expressed declaratively
-  rather than as hand-rolled map-of-slices code — which is where Boodie's
+  rather than as hand-rolled map-of-slices code, which is where Boodie's
   2,839-line `analysis.py` came from.
 - The report and the CSV exports are generated **from the same SQL views**, so
   they cannot disagree. Boodie needed a dedicated regression test for exactly
@@ -130,14 +130,14 @@ pushing logic into SQL rather than Go loops. Concretely it buys:
   CSVs, at zero extra cost.
 - Free Parquet/CSV/JSON export.
 
-**Honest alternative — Rust.** `notatin` (registry, *with* transaction-log
+**The honest alternative is Rust.** `notatin` (registry, *with* transaction-log
 replay) and `omerbenamram/evtx` are the strongest DFIR parsers in any language,
 and Rust would be faster still. It is not recommended because Go is already an
 order of magnitude past the performance requirement, and Rust costs
 significantly more development time in an ecosystem the rest of the toolchain
 does not share.
 
-### Registry transaction-log replay — resolved by Phase 0
+### Registry transaction-log replay: resolved by Phase 0
 
 **Superseded.** This was flagged as the largest technical unknown on the
 assumption that `regparser` had no replay. It does:
@@ -149,13 +149,13 @@ func RecoverHive(hive *os.File, logFiles ...*os.File) (*os.File, error)
 It copies the hive, applies dirty pages from the logs in sequence order, skips a
 log whose sequence number does not follow the base, and corrects the header
 checksum. Verified against all four sample collections. The source file is only
-ever read and the recovered copy is ours to delete — which is the staging
+ever read and the recovered copy is ours to delete, which is the staging
 contract this plan requires.
 
 One Phase 1 refinement: `RecoverHive` writes its copy to `os.TempDir()`. Boobook
 must place it under the caller's working root instead, so a run's staged evidence
 sits in one controlled location. Either set the process temp directory or vendor
-the function — small and known.
+the function, which is small and known.
 
 We still do not silently parse a dirty hive as if it were clean: the run reports
 whether replay succeeded either way.
@@ -209,7 +209,7 @@ starts.
    └─────────────┘            └─────────────────┘
 ```
 
-**Layer discipline:** parsers know nothing about USB semantics — they turn bytes
+**Layer discipline:** parsers know nothing about USB semantics; they turn bytes
 into rows. All USB meaning lives in the SQL correlation layer and the
 classifier. This is what keeps the parser layer testable against public fixtures
 and the semantics layer reviewable as plain SQL.
@@ -252,8 +252,8 @@ node by parentage puts all three on one device.
 A Windows-generated instance id (`&` as second character) is flagged
 `not_unique` and is **never** used to assert two records are the same device.
 
-Links that are suggestive but not conclusive — a serial that is a prefix of
-another, a hardware id declared by two identical devices — are recorded as
+Links that are suggestive but not conclusive, such as a serial that is a prefix
+of another or a hardware id declared by two identical devices, are recorded as
 candidates with their reason, reported, and never grouped on.
 
 ### 5.2 Investigative category
@@ -273,7 +273,7 @@ one container.
 Tier 1/2/3 per the priority document, plus a numeric score from the weighted
 indicator lists (high-value / suspicion / lower-value) in §"Suggested
 Device-Scoring Factors". Every device carries a `classification_reason` naming
-the evidence that produced its category and score — a classification an analyst
+the evidence that produced its category and score: a classification an analyst
 cannot interrogate is one they will not trust.
 
 **`review_required`** is a separate flag, not a tier: unknown class, unknown
@@ -285,13 +285,13 @@ multiple interfaces, unclear parentage.
 Default weighting is the general corporate profile. A `--profile` flag
 (`exfiltration`, `printing`, `network-bypass`, `identity`, `ot`) reweights so
 that, for example, printers become Tier 1 in an unauthorised-printing matter.
-Reweighting changes *placement and score only* — never what is extracted.
+Reweighting changes *placement and score only*, never what is extracted.
 
 ---
 
 ## 6. Sources parsed
 
-**Tier A — core, Phase 1**
+**Tier A: core, Phase 1**
 
 | Source | Yields |
 |---|---|
@@ -302,22 +302,22 @@ Reweighting changes *placement and score only* — never what is extracted.
 | `SYSTEM\...\Control\Print\Printers` | printer queues |
 | `SYSTEM\...\Control\TimeZoneInformation` | bias, for SetupAPI local-time conversion |
 | `SOFTWARE\...\Windows Portable Devices` | friendly names, volume labels |
-| `SOFTWARE\...\EMDMgmt` | volume serial ↔ device (absent on Win11 — handled) |
+| `SOFTWARE\...\EMDMgmt` | volume serial ↔ device (absent on Win11, handled) |
 | `NTUSER.DAT` / `UsrClass.dat` | `MountPoints2`, RecentDocs, OpenSave/LastVisited MRU, ShellBags |
 | `Windows\INF\setupapi.dev.log` | device installation, local time + both seasonal UTC candidates |
 | Dedicated EVTX channels | Partition/Diagnostic, Kernel-PnP Config + Device Config, StorSvc, DeviceSetupManager, DriverFrameworks-UserMode, StorageVolume, WPD-MTPClassDriver, Ntfs/Operational |
 | `System.evtx` (20001/20003), `Security.evtx` (6416) | driver install, new external device recognised |
 | User LNK files, Automatic + Custom Jump Lists | target path, drive letter, **volume serial**, timestamps |
 
-**Tier B — Phase 3**
+**Tier B: Phase 3**
 
 Prefetch, `$MFT` / `$UsnJrnl:$J` on the host volume, Recycle Bin, PCA
-(`Windows\appcompat\pca`), Windows Search index (`Windows.db` — present in the
+(`Windows\appcompat\pca`), Windows Search index (`Windows.db`, present in the
 sample collections and an underused source of paths on removable volumes).
 
 **Notable:** unlike Boodie, `System.evtx` and `Security.evtx` are **not**
 deferred to a separate "full" mode. At Go speed there is no reason for a triage
-mode that omits them — the whole triage/full split disappears, along with the
+mode that omits them: the whole triage/full split disappears, along with the
 "a triage workspace cannot be promoted to full" trap.
 
 ### Event log selection is a catalogue, not a filter
@@ -327,7 +327,7 @@ Implemented in Phase 1 (`internal/eventlog/catalogue.go`), printable with
 carries, every extracted field is named with the **role** it plays, and every
 event considered and rejected is recorded **with the reason**. Correlation joins
 on roles, not on field names, because the channels disagree: `DeviceInstanceId`,
-`Prop_DevnodeId`, `DiskInstancePath` and — on `System` 219 — `DriverName` all
+`Prop_DevnodeId`, `DiskInstancePath` and, on `System` 219, `DriverName` all
 hold a device instance ID.
 
 Two consequences worth stating plainly:
@@ -338,7 +338,7 @@ Two consequences worth stating plainly:
 - **`Security.evtx` 4663/4656 are catalogued but not yet selected.** Removable
   storage auditing names `\Device\HarddiskVolumeN`, not a device, so reaching a
   device needs the volume resolved first. The NTFS mount events supply exactly
-  that mapping, so this becomes available once correlation lands — selecting it
+  that mapping, so this becomes available once correlation lands. Selecting it
   now would flood the output with file access that cannot be attributed. This
   is a deviation from "Security.evtx is not deferred": the file is read when a
   rule selects it, and for v1 no rule does.
@@ -358,8 +358,8 @@ empty. Boobook walks every available route and labels each:
 | MBR disk signature from a Partition/Diagnostic 1006 record, partition offsets agreeing | `strong` |
 | Volume GUID ↔ device via `MountedDevices`, letter via `MountPoints2` | `strong` |
 | Unique device-reported serial component appearing in a persisted path | `probable` |
-| GPT `DMIO:ID:` partition GUID vs Partition/Diagnostic `PartitionTable` bytes | `possible` — layout undocumented, **emitted and labelled as unverified** rather than blocked |
-| `RegistryId` from Partition/Diagnostic resolved into the SYSTEM hive | `possible` — matching key unverified, labelled |
+| GPT `DMIO:ID:` partition GUID vs Partition/Diagnostic `PartitionTable` bytes | `possible`: layout undocumented, **emitted and labelled as unverified** rather than blocked |
+| `RegistryId` from Partition/Diagnostic resolved into the SYSTEM hive | `possible`: matching key unverified, labelled |
 | Volume label ↔ Portable Devices FriendlyName, unique match only | `possible` |
 
 File activity is then joined on **volume serial first** (which belongs to the
@@ -369,14 +369,15 @@ on drive letter within a connection window second.
 Timing is stated but never overstated: a path inside an open-ended window is
 context, not proof the device was connected, and the row says so.
 
-### What the reference evidence actually supports — Phase 2 scoping
+### What the reference evidence actually supports: Phase 2 scoping
 
 Two findings from checking the routes above against the four sample collections,
 rather than against the documentation.
 
-**`EMDMgmt` is unavailable on every sample host** — absent on the three Lenovo
-collections, present but empty on the CTF one. That removes a route rated
-`confirmed`, and it is the only route that ties a **volume serial** to a device.
+**`EMDMgmt` is unavailable on every sample host.** It is absent on the three
+Lenovo collections and present but empty on the CTF one. That removes a route
+rated `confirmed`, and it is the only route that ties a **volume serial** to a
+device.
 Nothing else supplies one: `Partition/Diagnostic` 1006 carries `Mbr`, `Ebr0`–`3`
 and `PartitionTable` but **no VBR**, so no volume serial number comes from the
 event logs either. On any current Windows, the volume serial a shell link
@@ -386,7 +387,7 @@ The consequence is that the **volume label ↔ Portable Devices FriendlyName**
 route, rated `possible`, does the work the `confirmed` route was meant to do.
 Its confidence does not rise because it is needed. It rises only when a
 connection window corroborates it, and the uniqueness qualifier has to be
-enforced rather than assumed — on the Lenovo host the label `UEFI_NTFS` appears
+enforced rather than assumed: on the Lenovo host the label `UEFI_NTFS` appears
 twice, so that label resolves to nothing and must say so.
 
 **That route does resolve the letter-reuse case.** Portable Devices on the
@@ -411,8 +412,8 @@ signature that `MountedDevices` stores. Decoding them turns "some volume" into
 Three checks stand behind that decode, because a decoder reading at the wrong
 offset produces plausible-looking GUIDs rather than an error:
 
-- The type GUIDs come out as the documented well-known values — EFI System,
-  Microsoft Reserved, Basic Data, Windows Recovery — which nothing but correct
+- The type GUIDs come out as the documented well-known values (EFI System,
+  Microsoft Reserved, Basic Data, Windows Recovery), which nothing but correct
   offsets would produce.
 - On the Lenovo host, `C:` in `MountedDevices` is
   `{d3c26787-16ab-4663-8b6d-20737e298b82}`, which is exactly partition 3 of
@@ -435,7 +436,7 @@ every MBR disk in a case acquires three phantom volumes.
 
 Phase 1 landed the shell link, jump list and SetupAPI parsers, and the sample
 collections turned out to hold exactly the case that makes "join on the letter"
-wrong: **drive `E:` was used by two different volumes** —
+wrong: **drive `E:` was used by two different volumes**.
 
 | Letter | Volume serial | Label | Targets |
 |---|---|---|---|
@@ -457,7 +458,7 @@ and from absent. All three are reported as themselves.
 
 ```
 Boobook/
-├── HOST-Boobook-Report.html         the report — self-contained, no network
+├── HOST-Boobook-Report.html         the report, self-contained, no network
 ├── HOST-Boobook-Summary.json        the headline, machine-readable
 ├── case.duckdb                      the whole case, queryable
 ├── data/
@@ -492,7 +493,7 @@ on a guess.
 Implemented in Phase 1 (`internal/shellitem`, `internal/registry/shellbags.go`).
 
 Shell bags, RecentDocs and the file dialog MRUs all record places through shell
-item lists, so one parser serves all three — and the shell link parser now reads
+item lists, so one parser serves all three, and the shell link parser now reads
 its target ID list through the same code rather than stepping over it.
 
 These artefacts name a **drive letter and nothing else**. No volume serial, no
@@ -514,8 +515,8 @@ Two constraints the format imposes:
   rather than closing over the hole. A path with a missing middle segment is a
   reading, not a place the user visited.
 
-The CTF host shows why this matters. Its bags record seven drive letters —
-`C:` through `J:` — including `F:\KAPE`, a forensics toolkit run from removable
+The CTF host shows why this matters. Its bags record seven drive letters,
+`C:` through `J:`, including `F:\KAPE`, a forensics toolkit run from removable
 media. `MountedDevices` maps only `G:` to a device. For the other five letters
 the bag is the sole surviving record that the volume was ever browsed, with the
 bag key's last-write time saying when.
@@ -527,8 +528,8 @@ Implemented in Phase 1 (`internal/store/schema.sql`, `internal/store/views.sql`)
 Nothing assembles an output row in Go. Each file in `data/` and `provenance/`
 is `COPY (SELECT * FROM <view>) TO <file>`, and the manifest records which view
 produced which file, how many rows it held and the SHA-256 of what was written.
-The console summary reads the same views. A second implementation in Go — even
-a faithful one — would be a second answer that has to be kept in agreement, and
+The console summary reads the same views. A second implementation in Go, even
+a faithful one, would be a second answer that has to be kept in agreement, and
 the failure mode is two numbers that are each defensible and not equal.
 
 The same reasoning applies inside the SQL. The serial rule is a macro
@@ -554,63 +555,64 @@ Three things this shook out of the reference evidence:
   `<non-utf8:…>` marker that cannot be mistaken for content the evidence held.
 
 `cmd/spike` was retired here. It carried its own loader and its own correlation
-query — a serial matched as a substring of a whole record, which the event
-catalogue replaced — and keeping it would have meant maintaining a second,
+query (a serial matched as a substring of a whole record, which the event
+catalogue replaced), and keeping it would have meant maintaining a second,
 weaker answer. Its Phase 0 go/no-go is recorded above and in commit `11b5405`.
 
-### Report structure — answer first
+### Report structure: answer first
 
-1. **At a glance** — devices seen, how many significant, evidence date range,
+1. **At a glance**: devices seen, how many significant, evidence date range,
    headline findings in plain sentences.
-2. **Significant devices** — one card per Tier 1/2 physical device: make, model,
+2. **Significant devices**, one card per Tier 1/2 physical device: make, model,
    serial, category, first seen, last seen, connection count, drive letters,
    count of file paths linked, and the source of each fact.
-3. **Timeline** — significant events only, chronological, one line each,
+3. **Timeline**: significant events only, chronological, one line each,
    filterable by device.
-4. **File activity on USB volumes** — grouped by device, `confirmed`/`strong`
+4. **File activity on USB volumes**: grouped by device, `confirmed`/`strong`
    inline, weaker links behind a disclosure.
-5. **All other devices** *(collapsed)* — Tier 3, grouped by category, count
+5. **All other devices** *(collapsed)*: Tier 3, grouped by category, count
    badge on the header.
-6. **Evidence coverage and limitations** — what was read, how far it reaches,
+6. **Evidence coverage and limitations**: what was read, how far it reaches,
    what was missing, what the tool does not claim.
 
 Times to the second, UTC named in the column header, truncated not rounded; full
 precision in the data files. No network fetch of any kind. Evidence text escaped
 so a device name cannot become markup. (These three are carried directly from
-Boodie — they were right.)
+Boodie, and they were right.)
 
 ### Progress reporting
 
-Phase, current artefact, records processed, elapsed, ETA — to stderr, rewriting
-in place at a terminal, one line per phase when redirected. ETA projected from
-measured throughput, held separately per artefact class. `--quiet` silences.
-Carried over from Boodie, which got this right.
+Phase, current artefact, records processed, elapsed and ETA, all to stderr,
+rewritten in place at a terminal, one line per phase when redirected. ETA
+projected from measured throughput, held separately per artefact class.
+`--quiet` silences. Carried over from Boodie, which got this right.
 
 ---
 
 ## 9. Phases
 
-**Phase 0 — spike (gates everything else).** No report, no polish. Prove:
+**Phase 0, the spike (gates everything else).** No report, no polish. Prove:
 registry hive parse incl. transaction-log replay; EVTX parse; the 60-second
 performance gate against the Lenovo sample; DuckDB load and one non-trivial
 correlation query. Output is a throughput measurement and a go/no-go on the Go
 stack. *This phase decides whether the plan below is the right plan.*
 
-**Phase 1 — evidence spine.** Discovery (triage-pack + mounted-volume layouts,
-Velociraptor/KAPE encoded roots, percent-encoded EVTX names), hashing, staging,
-manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
+**Phase 1, the evidence spine.** Discovery (triage-pack and mounted-volume
+layouts, Velociraptor/KAPE encoded roots, percent-encoded EVTX names), hashing,
+staging, manifest, all Tier A parsers, DuckDB schema, provenance chain.
+Deliverable:
 `devices.csv` + `devnodes.csv` + `observations.jsonl`, correct and traceable.
 
-**Phase 2 — correlation and classification.** Six units, in this order:
+**Phase 2, correlation and classification.** Six units, in this order:
 
-1. **Volume model and device↔volume links** — volumes as first-class rows, one
+1. **Volume model and device↔volume links**: volumes as first-class rows, one
    link row per route with its confidence, plus the MBR and GPT decoding above.
-2. **Connection windows** — arrival and removal evidence paired into intervals,
+2. **Connection windows**: arrival and removal evidence paired into intervals,
    with unpaired arrivals left open-ended and said to be. *(Done.)*
 
    Three things the reference evidence forced. Several channels report the same
    arrival within seconds, so repeated changes of one state are a single
-   transition — otherwise every visit is multiplied by the number of channels
+   transition; otherwise every visit is multiplied by the number of channels
    that saw it. A Kernel-PnP 420 is a removal only at problem code 45; with any
    other code the device is still present and closing the window would
    manufacture a removal. And the interval between an arrival and the next
@@ -621,10 +623,11 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
 
    The Ntfs volume mount records are excluded from windows because they name
    `\Device\HarddiskVolumeN` rather than a device. The CTF host produces no
-   windows at all — it collected none of the channels that carry arrivals — and
-   the run says so, because an empty section reads as "nothing was connected".
-3. **File activity attribution** — every file and folder record joined to a
-   device by serial, then unique label, then letter within a window. *(Done —
+   windows at all, having collected none of the channels that carry arrivals,
+   and the run says so, because an empty section reads as "nothing was
+   connected".
+3. **File activity attribution**: every file and folder record joined to a
+   device by serial, then unique label, then letter within a window. *(Done;
    the acceptance test passes.)*
 
    On the reference evidence, `E:\10MB-TESTFILE.ORG.pdf` now yields:
@@ -637,7 +640,7 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    The label is unique to the SanDisk *and* a connection window independently
    places that device on the machine when the file was opened. The letter route
    still reports the Patriot device, because `MountedDevices` really does map
-   `E:` to it — but only as `possible`, with the reason stated: the mapping is
+   `E:` to it, but only as `possible`, with the reason stated: the mapping is
    current and nothing places that device there at the time.
 
    **Both candidates are kept.** Collapsing to one answer per file is a
@@ -651,13 +654,13 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    time; without one it stays `possible`.
 
    Records that reach no device are reported grouped by drive letter, because
-   that is the explanation — almost all are on the internal disk. A bare total
+   that is the explanation: almost all are on the internal disk. A bare total
    invites "60 records could not be attributed" to be read as a parse failure.
 
    `EMDMgmt`'s key name is now decoded for the device it embeds, so the
    `confirmed` serial route works on hosts that have the key. None of the four
    reference hosts do.
-4. ~~**Physical device grouping** — §5.1 precedence, method recorded.~~ **Done.**
+4. ~~**Physical device grouping**: §5.1 precedence, method recorded.~~ **Done.**
 
    `devices.csv` is now one row per physical device. On the reference hosts 103
    to 105 identities group into 82 or 83 devices; twelve or thirteen devices per
@@ -669,8 +672,8 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    needed a guard:
 
    - **A hardware id is not a serial.** SetupAPI install sections name some
-     devices by hardware id — `USB\VID_8087&PID_0AAA&REV_0002` has no instance
-     segment — and reading its last segment as a serial invents a serial out of
+     devices by hardware id (`USB\VID_8087&PID_0AAA&REV_0002` has no instance
+     segment), and reading its last segment as a serial invents a serial out of
      the product id, which then joins every device sharing that product. An
      identity with fewer than three segments now has no serial at all.
    - **Hardware id to devnode** is the fifth route, and the only way an install
@@ -692,7 +695,7 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    **The truncated SanDisk serial resolved as predicted.** The `USB` enumerator
    holds a 120 character serial that `USBSTOR` stores as its first 63, so serial
    equality never fires and `ContainerID` carries it. The prefix is emitted as
-   `serial_prefix_candidate` and never grouped on — a vendor issuing sequential
+   `serial_prefix_candidate` and never grouped on: a vendor issuing sequential
    serials produces prefixes between devices that are not the same.
 
    That distinction earned itself on `USB-LENOVO-SANDISK`, where one SanDisk has
@@ -705,15 +708,15 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    dropped.
 
    The physical device id is the identity that speaks for the group, chosen by a
-   total ordering — a real serial first, then an instance id over a hardware id,
+   total ordering: a real serial first, then an instance id over a hardware id,
    then the enumerator that names a vendor and product. It is the same on every
    run over the same evidence, because an identifier that moved between runs
    could not be cited in a report.
-5. ~~**Classification** — category, tier, score, `classification_reason`,
+5. ~~**Classification**: category, tier, score, `classification_reason`,
    `review_required`, weights in a data file, `--profile` reweighting.~~ **Done.**
 
    **Rules match on facts, and the rules are data.** A fact is something derived
-   from the evidence that can be pointed at — a USB base class in a compatible
+   from the evidence that can be pointed at: a USB base class in a compatible
    id, a mounted volume, a HID interface sitting beside storage. The derivations
    live in `views.sql`, each carrying the value that produced it; the rules,
    weights and profiles live in `internal/classify/rules.json` and are loaded
@@ -725,7 +728,7 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
 
    **The USB base class is the backbone, not the setup class.** `USB\Class_08`
    is what the device said it can do; the setup class is what Windows filed the
-   driver under. `USB\COMPAT_VID_0781&Class_08` deliberately does not match —
+   driver under. `USB\COMPAT_VID_0781&Class_08` deliberately does not match:
    that is the vendor's own compatible id and matching it counts one interface
    twice.
 
@@ -743,8 +746,8 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
      because a phone can be known only from its `WPDBUSENUM` node and
      suppressing that would drop a portable device out of tier 1 entirely.
    - **The machine's own disk is not a USB finding.** Internal storage is
-     reported — it explains the file records that reach no removable device —
-     and the `internal_bus` fact keeps it at tier 3.
+     reported, because it explains the file records that reach no removable
+     device, and the `internal_bus` fact keeps it at tier 3.
    - **The virtual machine's SATA CD-ROM was reported as a potentially
      offensive device**, because storage plus an emulated optical volume is how
      payloads are delivered. That rule now requires `usb_attached`.
@@ -752,7 +755,7 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    **`review_required` had to be scoped or it was worthless.** Flagging every
    missing serial and missing vendor id put 81 of 82 devices in review, which is
    the same as flagging none. Review now excludes software nodes and internal
-   storage — things that have no serial because they are not devices — and lands
+   storage, things that have no serial because they are not devices, and lands
    on 6 to 15 devices per host.
 
    The result on the reference evidence: tier 1 is 3 to 5 devices per host, and
@@ -774,7 +777,7 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    after the last load and before the first read. The reasoning stays in
    `v_device_grouping` and `v_device_fact_computed`, so there is still one place
    where each thing is decided.
-6. ~~**Timeline** — every timestamped record in one shape, with UTC instants and
+6. ~~**Timeline**: every timestamped record in one shape, with UTC instants and
    zoneless local wall clock kept distinguishable rather than merged.~~ **Done.**
 
    `v_timeline` is one row per timestamped record from thirteen branches: event
@@ -783,7 +786,7 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    the attribution reached, shell item FAT timestamps, mount point key writes
    and disk layout reads. `data/timeline.csv` is the whole of it and
    `data/timeline-significant.csv` the same view filtered to tier 1 and tier 2
-   devices — a filter, not a second query, so narrowing the question never
+   devices: a filter, not a second query, so narrowing the question never
    loses the answer to the wider one.
 
    **The records do not all carry the same kind of time, and merging them is
@@ -797,8 +800,8 @@ manifest, all Tier A parsers, DuckDB schema, provenance chain. Deliverable:
    database.** `host_time_zone` stores `Bias`, `StandardBias` and
    `DaylightBias` and no converted value, because which one applies depends on
    whether daylight saving was in force when the record was written and nothing
-   in the record says. Both readings are offered — `time_utc` and
-   `time_utc_alt`, with `time_ambiguous` set — which is what
+   in the record says. Both readings are offered, `time_utc` and
+   `time_utc_alt`, with `time_ambiguous` set, which is what
    `LoadSetupSections` already did for its own timestamps; the timeline now
    does it for every wall clock, using the same biases, and a test asserts the
    two conversions agree. On `USB-CTF` the host is Pacific and 20 entries carry
@@ -846,10 +849,10 @@ Deliverable: the full `data/` set. **Phase 2 is complete.**
 Units 1 and 2 are independent and both gate unit 3. Unit 4 gates unit 5. Unit 6
 is last because it consumes the windows and the attribution.
 
-**Phase 3 — the report.** Self-contained HTML, answer-first structure, tiering
+**Phase 3, the report.** Self-contained HTML, answer-first structure, tiering
 and disclosure behaviour, progress reporting, case profiles.
 
-1. ~~**Skeleton, at a glance and coverage** — the package, the embedded
+1. ~~**Skeleton, at a glance and coverage**: the package, the embedded
    template, and the two sections that frame everything else.~~ **Done.**
 
    **The report is a document, so Go renders it; the findings are not, so they
@@ -861,12 +864,12 @@ and disclosure behaviour, progress reporting, case profiles.
    file have one query behind them and cannot drift apart.
 
    **A headline finding carries its own basis.** Each names the file a reader
-   can open to argue with it — `devices.csv, category Storage`,
+   can open to argue with it: `devices.csv, category Storage`,
    `file-attribution-summary.csv, candidate_devices = 0`. Findings with nothing
    behind them do not appear: a report should not spend the top of its page
    saying what it did not find, so there is no "0 storage devices were found"
-   where the answers go. The exception is a finding that *is* an absence — "no
-   connection window could be derived" — because silence there reads as
+   where the answers go. The exception is a finding that *is* an absence, "no
+   connection window could be derived", because silence there reads as
    "nothing was ever connected".
 
    Gaps rank alongside answers rather than below them. On `USB-CTF` the second
@@ -876,7 +879,7 @@ and disclosure behaviour, progress reporting, case profiles.
 
    **One correction the reference evidence forced.** `Source.Replayed` was a
    plain `bool`, so every event log, shortcut and jump list in a collection
-   stored `false` — and the coverage table duly reported "7 hives parsed
+   stored `false`, and the coverage table duly reported "7 hives parsed
    without transaction-log replay" against `EVTX`, `LNK` and `JUMPLIST`. Replay
    applies to a registry hive and to nothing else, so it is now `*bool` and nil
    says the question does not arise. The same distinction the tool makes
@@ -885,14 +888,14 @@ and disclosure behaviour, progress reporting, case profiles.
    Self-containment is a test, not an intention: the rendered document is
    checked for `http`, `//cdn`, `<script`, `src=` and `@import`, because an
    examiner opens a report on a machine with no network, often years later.
-   Evidence text is escaped by `html/template` — a device named
-   `<script>alert(1)</script>` renders as its name — and a test asserts it.
+   Evidence text is escaped by `html/template`, so a device named
+   `<script>alert(1)</script>` renders as its name, and a test asserts it.
    Times are truncated rather than rounded, since rounding up can place a
    record after an event it preceded.
 
    `-no-report` writes the data files alone. The report is recorded in the
    manifest with its SHA-256 like every other output.
-2. ~~**Significant device cards** — one per tier 1/2 physical device, with the
+2. ~~**Significant device cards**: one per tier 1/2 physical device, with the
    source of each fact.~~ **Done.**
 
    The unit of the card is the physical device, and each card names the
@@ -906,7 +909,7 @@ and disclosure behaviour, progress reporting, case profiles.
    on.** A card says "serial 24111912130128"; this says which registry key, in
    which file, with that file's SHA-256 as this run read it. Where the
    identities in a group disagreed about a field, the card says so and gives
-   the count — a value was chosen, and the reader should know a choice existed.
+   the count: a value was chosen, and the reader should know a choice existed.
 
    **The first version of it cited the wrong record, which is worse than citing
    none** because it looks checked. The card header read "PATRIOT USB Device"
@@ -923,7 +926,7 @@ and disclosure behaviour, progress reporting, case profiles.
    which record the citation points at.
 
    **Two wordings the evidence forced.** "Connected X to Y" states a continuity
-   nothing evidenced — the log records an arrival and, later, the next removal,
+   nothing evidenced: the log records an arrival and, later, the next removal,
    and one SanDisk's single window spans eight months. It reads "earliest
    arrival …; latest removal …". And a count of zero is shown rather than
    hidden: "0 file paths linked" on a storage device is a finding, where an
@@ -936,18 +939,18 @@ and disclosure behaviour, progress reporting, case profiles.
    connection window covers it and five readers now want the answer. The
    headline counts came from five subqueries over `v_device_classified`, which
    is five full evaluations of the grouping, the facts and the rules for five
-   numbers one scan produces — now one pass with `FILTER`, and the findings
+   numbers one scan produces. It is one pass with `FILTER` now, and the findings
    read a `MATERIALIZED` CTE. And the card drill-downs are read once for all
    devices and distributed, rather than three queries per card.
 
    The report phase is 0.9 to 1.7 seconds of that.
-3. ~~**Timeline** — significant events only, filterable by device.~~ **Done.**
+3. ~~**Timeline**: significant events only, filterable by device.~~ **Done.**
 
    Every timestamped record belonging to a tier 1 or tier 2 device, oldest
    first, read from `v_timeline_significant`. Each row carries what its
-   timestamp *means* — "one stored state and not a connection history" beside a
+   timestamp *means* ("one stored state and not a connection history" beside a
    `last_arrival_date`, "not the time it was opened" beside a file's written
-   time — the artefact it came from, the file, and its `entry_id` in
+   time), the artefact it came from, the file, and its `entry_id` in
    `timeline-significant.csv`, so any row on the page can be found in the data.
 
    **A time this run worked out and a time an artefact recorded are different
@@ -955,7 +958,7 @@ and disclosure behaviour, progress reporting, case profiles.
    `UTC` or `local→UTC`, and a converted row carries the wall clock exactly as
    written plus the sentence that qualifies it. Where the host observes daylight
    saving and the record does not say which season it was written in, both
-   readings are shown — "either 11:00:00 or 10:00:00 UTC" — rather than one
+   readings are shown, "either 11:00:00 or 10:00:00 UTC", rather than one
    being chosen. Where no host zone was recovered at all the row says it has no
    UTC reading and is placed by reading its wall clock as UTC.
 
@@ -971,11 +974,11 @@ and disclosure behaviour, progress reporting, case profiles.
    - **Three sticks of one model produce one friendly name.** The chips read
      "USB SanDisk 3.2Gen1 USB Device" three times, which is a filter that cannot
      answer the question it exists for. Where a name repeats, the serial tail is
-     added — to the chip and to every row, so the two agree.
+     added, to the chip and to every row, so the two agree.
    - **A confidence on every row said nothing.** Each non-file branch of the
      timeline is `confirmed` by construction, because the record names the
      device. A page of confirmed chips both drowns the handful that are weaker
-     and invites the wrong reading — that the *event* is confirmed rather than
+     and invites the wrong reading, that the *event* is confirmed rather than
      the link to the device. It is shown only where it is less than certain, and
      worded "probable link to this device".
    - **The count query was a second full evaluation.** Short of the cap the rows
@@ -983,7 +986,7 @@ and disclosure behaviour, progress reporting, case profiles.
 
    Capped at 750 entries with the omission stated; 123 to 317 per collection, so
    nothing is currently capped. The report phase is 1.5 to 2.2 seconds.
-4. ~~**File activity** — grouped by device, weaker links behind a
+4. ~~**File activity**: grouped by device, weaker links behind a
    disclosure.~~ **Done.**
 
    `v_report_file_activity` is one row per device and record, carrying the
@@ -998,8 +1001,8 @@ and disclosure behaviour, progress reporting, case profiles.
    not one confirmed or strong link: the `EMDMgmt` key that tied a volume serial
    to a device is gone from current Windows, so the routes that remain are the
    unique volume label and the drive letter, both capped at probable. A fixed
-   bar would have hidden every file record in every collection, and `USB-CTF` —
-   which is entirely `possible` — would have shown an empty section with
+   bar would have hidden every file record in every collection, and `USB-CTF`,
+   which is entirely `possible`, would have shown an empty section with
    everything behind a disclosure. What each device shows inline is the firmest
    link it actually has, with the rest disclosed beneath, and the page says that
    is what it is doing and why.
@@ -1013,7 +1016,7 @@ and disclosure behaviour, progress reporting, case profiles.
 
    **A gap says what stopped it.** 50 to 60 records per collection reach no
    device; the reason is either that the record carries no letter, serial or
-   label at all, or that its letter is linked to no USB device — which for `C:`
+   label at all, or that its letter is linked to no USB device, which for `C:`
    is the expected answer and for a removable letter is a finding. A gap with no
    reason beside it reads as a failure of this tool rather than of the evidence.
 
@@ -1023,13 +1026,13 @@ and disclosure behaviour, progress reporting, case profiles.
    The report phase is 1.5 to 2.3 seconds.
 
    One thing this surfaced and did not fix: `USB-CTF` holds RecentDocs entries
-   named `A2-64 (G).lnk` — a volume label and a drive letter in the display
+   named `A2-64 (G).lnk`, a volume label and a drive letter in the display
    string, with no letter in the record itself. Reading a device out of that is
    inference from how Explorer renders a name rather than from a stored field,
    so it is a candidate route for Phase 4 and not a silent one here.
-5. ~~**Tier 3, collapsed** — visible without swamping the analyst.~~ **Done.**
+5. ~~**Tier 3, collapsed**: visible without swamping the analyst.~~ **Done.**
 
-   26 to 73 devices per collection sit at tier 3 — hubs, keyboards, cameras, the
+   26 to 73 devices per collection sit at tier 3: hubs, keyboards, cameras, the
    machine's own disks. They are all present, grouped by category behind five
    collapsed lines, each naming its device count and the event records behind
    it. A tier is a ranking and not a filter: a report that dropped them could
@@ -1041,14 +1044,14 @@ and disclosure behaviour, progress reporting, case profiles.
    **Review is lifted out of the collapsed groups, and building that exposed a
    rule that was flagging noise.** The first render put eight devices under
    "flagged for review" at the head of the section, every one of them reading
-   "No serial number is present, or Windows generated it" — four keyboards, two
+   "No serial number is present, or Windows generated it": four keyboards, two
    root hubs, a Bluetooth radio and a smartcard reader. None of those classes
    carries a serial and none ever did. Thirteen flags on the reference host,
    eight of them device classes behaving normally: a flag raised on everything
    is a flag raised on nothing, and this section would have led with it.
 
-   So a review fact can now carry `unless` — facts that make it normal rather
-   than notable — in the rule set beside the fact itself, with the reason
+   So a review fact can now carry `unless`, facts that make it normal rather
+   than notable, in the rule set beside the fact itself, with the reason
    written down where it can be argued with. `no_serial` is excepted for
    `hid_interface`, `hub_interface`, `wireless_interface` and
    `smartcard_interface`; `no_vid_pid` for `internal_hub`, because a root hub
@@ -1061,7 +1064,7 @@ and disclosure behaviour, progress reporting, case profiles.
 
    Verified across all four collections: 252 KB to 569 KB of self-contained
    HTML, report phase 1.7 to 2.5 seconds, whole runs 8 to 13 seconds.
-6. **Progress reporting** — phase, artefact, elapsed and ETA. *(Done.)*
+6. **Progress reporting**: phase, artefact, elapsed and ETA. *(Done.)*
 
    One line, rewritten in place at a terminal: the phase, the artefact in hand,
    how many of the phase's files are done, the records read, elapsed and an
@@ -1073,7 +1076,7 @@ and disclosure behaviour, progress reporting, case profiles.
    measured no estimate is shown, which is why the first line of a phase carries
    none. The artefact in hand counts as unread until it is finished, so the
    figure errs long rather than short. Elapsed is kept moving by a tick, because
-   the phases that say nothing for seconds — the consolidation and the export —
+   the phases that say nothing for seconds, the consolidation and the export,
    are exactly the ones that look like a hung run.
 
    Two things the reference collections forced. The event log phase declares its
@@ -1089,7 +1092,7 @@ and disclosure behaviour, progress reporting, case profiles.
    they landed in the middle of the progress line and stayed there, and they
    ignored `-quiet` entirely.
 
-**Phase 4 — depth.** Tier B sources, GPT partition chain, `$UsnJrnl`, subject-USB
+**Phase 4, depth.** Tier B sources, GPT partition chain, `$UsnJrnl`, subject-USB
 filesystem bundle, adversarial/malformed fixtures, packaged smoke tests in CI.
 
 ### Validation approach
@@ -1108,16 +1111,16 @@ regression suite: `USB-LENOVO` (no stick), `USB-LENOVO-SANDISK` (stick present),
 
 Settled 2026-08-01.
 
-1. **Stack — Go + embedded DuckDB.** Single static binary, Velociraptor-derived
+1. **Stack: Go + embedded DuckDB.** Single static binary, Velociraptor-derived
    parsers, correlation in SQL. Registry transaction-log replay is the one open
    technical question and is resolved in Phase 0.
-2. **Delivery — CLI first, GUI later.** Phases 0–4 target a CLI producing the
+2. **Delivery: CLI first, GUI later.** Phases 0–4 target a CLI producing the
    HTML report and data files. A Wails GUI over the same `case.duckdb` remains
    possible later, as in Firetail, but is out of scope until the CLI is proven.
-3. **v1 artefact scope — Tier A only.** Registry, SetupAPI, USB-relevant EVTX,
+3. **v1 artefact scope: Tier A only.** Registry, SetupAPI, USB-relevant EVTX,
    and user shell artefacts. Host `$MFT`/`$UsnJrnl`/prefetch and the Windows
    Search index stay in Phase 4.
-4. **Case profiles — default weighting only for v1.** The general corporate
+4. **Case profiles: default weighting only for v1.** The general corporate
    profile ships first; `--profile` is added once the scoring is validated
    against real collections. The classifier is still built so that weights are
    data, not code, so adding profiles later is not a rewrite.
