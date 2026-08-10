@@ -2,19 +2,9 @@
   <img src="logo/boobook-384.png" alt="Boobook" width="192" height="192">
 </p>
 
-```
-====================================================
- ____              __                 __      (o,o)
-/\  _`\           /\ \               /\ \      /)  )
-\ \ \L\ \  ___  __\ \ \____  ___  ___\ \ \/'\  " "
- \ \  _ <'/ __`\/ __`\ '__`\/ __`\/ __`\ \ , <
-  \ \ \L\ \ \L\ \ \L\ \ \L\ \ \L\ \ \L\ \ \\`\
-   \ \____/\____/\____/\_,__/\____/\____/\_\ \_\
-    \/___/\/___/\/___/\/___/\/___/\/___/\/_/\/_/
-====================================================
--- Boobook: Digital forensics USB artefact parser --
-====================================================
-```
+<h1 align="center">Boobook</h1>
+
+<p align="center">Digital forensics USB artefact parser</p>
 
 Boobook reads a Windows evidence set, either a triage collection
 (Velociraptor, KAPE) or a mounted volume, and answers, in one report an analyst
