@@ -74,8 +74,25 @@ paths are all it needs:
 .\boobook.exe -evidence "E:\Triage\HOST01" -output "C:\Cases\2026-014"
 ```
 
-The evidence root can be a mounted image (`E:\`), a mounted volume, or a triage
-collection directory; the layout is detected and recorded in the manifest.
+`-evidence` wants the top of the source machine's system drive, not a folder
+inside it. The test is simple: at the path you give, you should be able to see
+that machine's `Windows\` and `Users\` folders sitting side by side. Point it at
+`Windows\System32\config` because that is where the registry hives live and it
+will find nothing at all, because that pair of folders is what it looks for.
+
+In practice that means:
+
+| What you have | What to pass |
+|---|---|
+| a mounted image, or a drive on a write blocker | the volume root, `E:\` |
+| a Velociraptor or KAPE triage collection | the folder the collector produced, the one holding `uploads\` or `C\` |
+
+A collection keeps the host's `Windows\` and `Users\` a level or two further
+down, under names like `uploads\auto\C%3A\`. You do not have to dig for them:
+Boobook recognises the collector's shape, finds the volumes inside it, and
+records which layout it decided on in the manifest, so a run can be checked
+against what it thought it was reading. It handles a collection holding more
+than one volume.
 
 ### What you get
 
