@@ -150,16 +150,19 @@ behind cgo. The released binary needs none of that.
 | `-case` | case reference, recorded in the manifest |
 | `-examiner` | examiner name, recorded in the manifest |
 | `-host` | label for the host under examination, recorded in the manifest |
-| `-profile` | reweights the relevance score: `general`, `exfiltration`, `printing`, `network-bypass`, `identity`, `ot` |
+| `-profile` | reweight the relevance score for the kind of case |
 | `-rule-set` | a classification rule set file instead of the built-in one |
 | `-no-report` | write only the data files |
 | `-quiet` | silence progress and narration; errors are still reported |
 | `-rules` | print the event log selection catalogue and exit |
 | `-sources` | print the evidence sources that can be read, and what each yields, and exit |
 
-A profile multiplies the weight of the facts it names and leaves the rest at
-1.0. **Reweighting changes placement and score only.** It never changes what was
-extracted, which facts were derived, or which category a rule assigned.
+The profiles are `general`, `exfiltration`, `printing`, `network-bypass`,
+`identity` and `ot`. Each multiplies the weight of the facts it names and leaves
+the rest at 1.0, so `-profile printing` lifts a printer into tier 1 in an
+unauthorised-printing matter. **Reweighting changes placement and score only.**
+It never changes what was extracted, which facts were derived, or which category
+a rule assigned.
 
 `-security` is off by default because `Security.evtx` holds little else worth
 having and costs the size of the file, which a raised log cap can make
