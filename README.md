@@ -394,8 +394,7 @@ the `.syso` has a generator rather than a provenance note.
 
 What is known to be incomplete, and why, is in
 [docs/OPEN-WORK.md](docs/OPEN-WORK.md); read it before assuming a silence in
-the output is a finding. Background on the artefacts is in [docs/](docs/): the
-plan, the registry reference, and the investigative priority ordering.
+the output is a finding.
 
 ### Standing constraints
 

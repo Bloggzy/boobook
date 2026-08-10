@@ -13,3 +13,13 @@
 AGENTS.md
 CLAUDE.md
 FINDINGS.md
+
+# The planning and reference material under docs/ stays local. It is the record
+# of how the tool got here rather than of what it does, and a historical plan
+# published beside the code is read as documentation and believed.
+#
+# OPEN-WORK.md is the exception and is deliberately published: the README points
+# at it, and a forensic tool that lists what it does not claim is more use than
+# one that lists only what it does.
+docs/*
+!docs/OPEN-WORK.md
