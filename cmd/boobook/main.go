@@ -57,6 +57,11 @@ type options struct {
 	// outputRoot is where the results go, and is what an examiner is actually
 	// choosing when they run the tool.
 	outputRoot string
+	// runID names the run directory instead of letting the run take a UTC
+	// timestamp. A calling tool has to know where the results will be before
+	// it starts the run, and it cannot work that out from a stamp taken
+	// inside the process.
+	runID string
 	// workingRoot puts scratch somewhere other than inside the output. Worth
 	// setting when the output is on a network share and copying a hive across
 	// it would dominate the run.
@@ -99,6 +104,10 @@ func parseFlags() options {
 	flag.StringVar(&opts.outputRoot, "output", "",
 		"output root: the report, the case database and the data files are "+
 			"written to a run directory beneath it")
+	flag.StringVar(&opts.runID, "run-id", "",
+		"name the run directory beneath the output root instead of taking a "+
+			"UTC timestamp; for a calling tool that has to know the path "+
+			"before the run starts. An existing directory is refused")
 	flag.StringVar(&opts.workingRoot, "working", "",
 		"scratch root for recovered hives and staged copies; defaults to "+
 			"inside the run's output directory")
@@ -275,7 +284,7 @@ func run(opts options) error {
 	defer pr.Close()
 
 	// ---- workspace ----------------------------------------------------
-	work, err := workspace.New(opts.outputRoot, opts.workingRoot)
+	work, err := workspace.New(opts.outputRoot, opts.workingRoot, opts.runID)
 	if err != nil {
 		return err
 	}

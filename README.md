@@ -91,7 +91,10 @@ than one volume.
 ### What you get
 
 A run directory beneath `-output`, stamped with the UTC date and time the run
-started, so a second run never overwrites a report already cited somewhere:
+started, so a second run never overwrites a report already cited somewhere.
+A tool calling Boobook can name that directory itself with `-run-id`, which is
+what lets it know the path before the run starts; an existing directory is
+refused either way:
 
 ```
 C:\Cases\2026-014\20260810T094132Z\
@@ -144,6 +147,7 @@ behind cgo. The released binary needs none of that.
 |---|---|
 | `-evidence` | evidence root: a mounted Windows volume or a triage collection |
 | `-output` | output root; results are written to a run directory beneath it |
+| `-run-id` | name the run directory instead of taking a UTC timestamp |
 | `-working` | scratch root, if it should not sit inside the output |
 | `-keep-working` | keep the scratch directory instead of removing it |
 | `-security` | read `Security.evtx` for logon and logoff records, off by default |

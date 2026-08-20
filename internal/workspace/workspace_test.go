@@ -22,7 +22,7 @@ func TestRedirectProcessTempDir(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	workspace, err := New(root, "")
+	workspace, err := New(root, "", "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRedirectProcessTempDir(t *testing.T) {
 
 func TestNewCreatesRunScopedDirectory(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "")
+	workspace, err := New(root, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestNewCreatesRunScopedDirectory(t *testing.T) {
 
 func TestStageCopiesFileIntoWorkspace(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "")
+	workspace, err := New(root, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestStageCopiesFileIntoWorkspace(t *testing.T) {
 // the parameter after the byproduct rather than after what the analyst chose.
 func TestTheRunDirectoryHoldsTheResultsAndScratchSitsUnderIt(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "")
+	workspace, err := New(root, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestTheRunDirectoryHoldsTheResultsAndScratchSitsUnderIt(t *testing.T) {
 // while it was still reading them.
 func TestASeparateScratchRootIsStillScopedByRun(t *testing.T) {
 	output, scratch := t.TempDir(), t.TempDir()
-	workspace, err := New(output, scratch)
+	workspace, err := New(output, scratch, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestASeparateScratchRootIsStillScopedByRun(t *testing.T) {
 // they were — and because a non-empty scratch tree means a previous run ended
 // early, which is worth saying rather than tidying away.
 func TestScratchIsCountedBeforeItIsDiscardedAndTheOutputSurvives(t *testing.T) {
-	workspace, err := New(t.TempDir(), "")
+	workspace, err := New(t.TempDir(), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestScratchIsCountedBeforeItIsDiscardedAndTheOutputSurvives(t *testing.T) {
 
 func TestManifestRecordsToolRunAndCounts(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "")
+	workspace, err := New(root, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,11 +303,11 @@ func TestManifestRecordsToolRunAndCounts(t *testing.T) {
 func TestTwoRunsInOneSecondNeverShareADirectory(t *testing.T) {
 	root := t.TempDir()
 
-	first, err := New(root, "")
+	first, err := New(root, "", "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	second, err := New(root, "")
+	second, err := New(root, "", "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestTwoRunsInOneSecondNeverShareADirectory(t *testing.T) {
 func TestARunNeverSharesAScratchDirectoryWithAnother(t *testing.T) {
 	output, working := t.TempDir(), t.TempDir()
 
-	first, err := New(output, working)
+	first, err := New(output, working, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestARunNeverSharesAScratchDirectoryWithAnother(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	second, err := New(output, working)
+	second, err := New(output, working, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -371,5 +371,101 @@ func TestARunNeverSharesAScratchDirectoryWithAnother(t *testing.T) {
 	if _, err := os.Stat(first.Dir); !os.IsNotExist(err) {
 		t.Errorf("%s was left behind by the run that could not claim its "+
 			"scratch directory", first.Dir)
+	}
+}
+
+// Boobook names its own run directory after a UTC timestamp taken inside the
+// process, which is right for an examiner running it by hand and useless to a
+// tool running it: Ibis has to know where the results will land before it
+// starts the run, and it cannot read a clock the run has not looked at yet. So
+// the caller may name the directory instead, and what it named is exactly what
+// it gets — no stamp, no suffix, no counting.
+func TestASuppliedRunIDNamesTheDirectoryExactly(t *testing.T) {
+	root := t.TempDir()
+
+	workspace, err := New(root, "", "ibis-0f2c")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if workspace.RunID != "ibis-0f2c" {
+		t.Errorf("RunID = %q, want ibis-0f2c", workspace.RunID)
+	}
+	if want := filepath.Join(root, "ibis-0f2c"); workspace.Dir != want {
+		t.Errorf("Dir = %q, want %q: a caller that supplied the id has to be "+
+			"able to construct the path itself", workspace.Dir, want)
+	}
+	if _, err := os.Stat(workspace.Dir); err != nil {
+		t.Errorf("the run directory was not created: %v", err)
+	}
+}
+
+// The exclusion the timestamp path relies on is the whole reason a second run
+// cannot overwrite a report already cited in a case note, and letting a caller
+// name the directory must not weaken it. It is settled differently, though:
+// counting on to -2 would hand the run a directory the caller is not watching
+// and is not going to read, so the run is refused instead and the caller is
+// told which directory is in the way.
+func TestASuppliedRunIDIsRefusedRatherThanCountedOnWhenItIsTaken(t *testing.T) {
+	root := t.TempDir()
+
+	first, err := New(root, "", "case-17")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	second, err := New(root, "", "case-17")
+	if err == nil {
+		t.Fatalf("the second run took %s, which the first run is writing into",
+			second.Dir)
+	}
+	if !strings.Contains(err.Error(), first.Dir) {
+		t.Errorf("the error does not name the directory in the way: %v", err)
+	}
+	if strings.Contains(err.Error(), "case-17-2") {
+		t.Errorf("the run counted on to a directory nobody asked for: %v", err)
+	}
+}
+
+// The id is joined onto both caller-supplied roots, so a separator, a volume or
+// a parent reference in it would put a run's results somewhere the caller never
+// named — the same class of promise as the evidence boundary, made about what
+// this tool writes rather than about what it reads. The refusal names the flag,
+// because a raw syscall message about a path nobody typed explains nothing.
+func TestARunIDThatIsNotADirectoryNameIsRefused(t *testing.T) {
+	for _, id := range []string{
+		"..",
+		".",
+		"../escape",
+		`..\escape`,
+		"nested/run",
+		`nested\run`,
+		`C:\elsewhere`,
+	} {
+		root := t.TempDir()
+		if _, err := New(root, "", id); err == nil {
+			t.Errorf("-run-id %q was accepted: it does not name one directory "+
+				"inside the output root", id)
+		}
+	}
+}
+
+// Scratch on a root of its own is scoped by the same id, so a supplied id has
+// to be free under both roots or the two runs share a scratch tree and one
+// deletes the other's recovered hives mid-read. Refused, and the output
+// directory is given back whole rather than left behind for a run that will
+// never write into it.
+func TestASuppliedRunIDMustBeFreeUnderTheScratchRootToo(t *testing.T) {
+	output, scratch := t.TempDir(), t.TempDir()
+
+	if err := os.Mkdir(filepath.Join(scratch, "case-17"), 0o755); err != nil {
+		t.Fatalf("stage the collision: %v", err)
+	}
+
+	if _, err := New(output, scratch, "case-17"); err == nil {
+		t.Fatal("the run took a scratch directory another run holds")
+	}
+	if _, err := os.Stat(filepath.Join(output, "case-17")); !os.IsNotExist(err) {
+		t.Error("the refused run left its output directory behind")
 	}
 }

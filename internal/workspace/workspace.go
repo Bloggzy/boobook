@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -53,7 +54,20 @@ const maxRunAttempts = 100
 //
 // workingRoot may be empty, which is the ordinary case: scratch then lives
 // inside the run's own output directory and is cleaned up with it.
-func New(outputRoot, workingRoot string) (*Workspace, error) {
+//
+// runID may be empty, which is the ordinary case: the run takes a UTC timestamp
+// and a caller who wants the results has to be told where they went. A calling
+// tool cannot work that way, because it has to know the path before the run
+// starts, so it supplies the id instead. Exclusivity is unchanged either way:
+// a supplied id is claimed with the same os.Mkdir, and a second run under one
+// id is refused rather than counted onwards, because counting would hand back
+// a directory the caller is not watching.
+func New(outputRoot, workingRoot, runID string) (*Workspace, error) {
+	if runID != "" {
+		if err := checkRunID(runID); err != nil {
+			return nil, err
+		}
+	}
 	// The roots themselves are made first so that the run directory beneath
 	// them can be claimed with os.Mkdir, which fails on an existing directory.
 	// MkdirAll would not: it treats one as success, which is the whole defect.
@@ -80,25 +94,28 @@ func New(outputRoot, workingRoot string) (*Workspace, error) {
 	// make them exclusive — two processes can still format the same string —
 	// and the claim being made here is exclusivity, so it has to come from the
 	// filesystem.
-	stamp := time.Now().UTC().Format("20060102T150405Z")
+	stamp := runID
+	if stamp == "" {
+		stamp = time.Now().UTC().Format("20060102T150405Z")
+	}
 
 	for attempt := 1; ; attempt++ {
-		runID := stamp
+		id := stamp
 		if attempt > 1 {
-			runID = fmt.Sprintf("%s-%d", stamp, attempt)
+			id = fmt.Sprintf("%s-%d", stamp, attempt)
 		}
 
 		workspace := &Workspace{
 			OutputRoot: outputRoot,
-			RunID:      runID,
-			Dir:        filepath.Join(outputRoot, runID),
+			RunID:      id,
+			Dir:        filepath.Join(outputRoot, id),
 		}
 
 		// A separate working root is still scoped by run id. Two runs sharing a
 		// scratch directory would have one delete the other's recovered hives.
 		workspace.WorkingRoot = workspace.Dir
 		if workingRoot != "" {
-			workspace.WorkingRoot = filepath.Join(workingRoot, runID)
+			workspace.WorkingRoot = filepath.Join(workingRoot, id)
 		}
 		workspace.tempDir = filepath.Join(workspace.WorkingRoot, "working")
 
@@ -107,6 +124,12 @@ func New(outputRoot, workingRoot string) (*Workspace, error) {
 			return nil, err
 		}
 		if taken {
+			if runID != "" {
+				return nil, fmt.Errorf(
+					"run directory %s already exists: a supplied -run-id "+
+						"names exactly one directory, and a run never writes "+
+						"into another run's results", workspace.Dir)
+			}
 			if attempt >= maxRunAttempts {
 				return nil, fmt.Errorf(
 					"no free run directory under %s after %d attempts at %s",
@@ -125,6 +148,12 @@ func New(outputRoot, workingRoot string) (*Workspace, error) {
 				// the id back whole rather than leaving a run directory behind
 				// that no run will ever write into.
 				os.Remove(workspace.Dir)
+				if runID != "" {
+					return nil, fmt.Errorf(
+						"scratch directory %s already exists: a supplied "+
+							"-run-id names exactly one directory under each "+
+							"root", workspace.WorkingRoot)
+				}
 				if attempt >= maxRunAttempts {
 					return nil, fmt.Errorf(
 						"no free run directory under %s after %d attempts at %s",
@@ -146,6 +175,24 @@ func New(outputRoot, workingRoot string) (*Workspace, error) {
 
 		return workspace, nil
 	}
+}
+
+// checkRunID refuses an id that is not one directory name.
+//
+// The id is joined onto two caller-supplied roots, so a separator or a volume
+// in it would put the results somewhere the caller did not name — and standing
+// rule 1 is about where this tool writes, not only about what it reads. The
+// error names the flag, because the alternative is a raw syscall message about
+// a path the caller never typed.
+func checkRunID(id string) error {
+	if id == "." || id == ".." || strings.ContainsAny(id, `/\:`) ||
+		filepath.Base(id) != id {
+		return fmt.Errorf(
+			"-run-id %q is not a directory name: it names one directory "+
+				"inside the output root, so it carries no separator, no "+
+				"volume and no parent reference", id)
+	}
+	return nil
 }
 
 // claim creates a directory and reports whether somebody else already had it.
