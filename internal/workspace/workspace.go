@@ -62,10 +62,28 @@ const maxRunAttempts = 100
 // a supplied id is claimed with the same os.Mkdir, and a second run under one
 // id is refused rather than counted onwards, because counting would hand back
 // a directory the caller is not watching.
-func New(outputRoot, workingRoot, runID string) (*Workspace, error) {
+// inPlace writes the results into outputRoot itself, with no run directory
+// beneath it. It is for a caller that has already made a directory for this run
+// and does not want a second one inside it; the run still takes an id, because
+// the id identifies the run in the manifest and on the report rather than only
+// naming a directory.
+//
+// What it gives up is the filesystem's own exclusion. A run directory is
+// claimed with one os.Mkdir, which two processes cannot both win; an existing
+// output root can only be checked for being empty, and two runs racing into a
+// fresh one both find it so. That is why it is a flag rather than a fallback
+// when the directory happens to be empty: the caller asking for it is one that
+// makes a directory per run, and it is stating that rather than being guessed
+// at from the state of a disk.
+func New(outputRoot, workingRoot, runID string, inPlace bool) (*Workspace, error) {
 	if runID != "" {
 		if err := checkRunID(runID); err != nil {
 			return nil, err
+		}
+		if inPlace {
+			return nil, errors.New(
+				"-run-id names a directory to make beneath the output root " +
+					"and -in-place says to make none: pass one or the other")
 		}
 	}
 	// The roots themselves are made first so that the run directory beneath
@@ -97,6 +115,10 @@ func New(outputRoot, workingRoot, runID string) (*Workspace, error) {
 	stamp := runID
 	if stamp == "" {
 		stamp = time.Now().UTC().Format("20060102T150405Z")
+	}
+
+	if inPlace {
+		return newInPlace(outputRoot, workingRoot, stamp)
 	}
 
 	for attempt := 1; ; attempt++ {
@@ -175,6 +197,60 @@ func New(outputRoot, workingRoot, runID string) (*Workspace, error) {
 
 		return workspace, nil
 	}
+}
+
+// newInPlace puts the results in the output root itself.
+//
+// The root is claimed the same way where it does not yet exist, so the ordinary
+// case still rests on one os.Mkdir. Where it does exist the only check
+// available is that it is empty, and it is a refusal rather than a warning: the
+// promise a run directory makes is that a second run never overwrites a report
+// already cited in a case note, and writing into an occupied directory is that
+// promise broken however the run was asked for.
+//
+// Scratch still goes where it always goes. It is inside the results unless the
+// caller named a separate root, and it is removed at the end of the run, so it
+// is not what the emptiness check is about.
+func newInPlace(outputRoot, workingRoot, runID string) (*Workspace, error) {
+	taken, err := claim(outputRoot)
+	if err != nil {
+		return nil, err
+	}
+	if taken {
+		entries, err := os.ReadDir(outputRoot)
+		if err != nil {
+			return nil, fmt.Errorf("read output root %s: %w", outputRoot, err)
+		}
+		if len(entries) > 0 {
+			return nil, fmt.Errorf(
+				"-in-place writes into %s and it already holds %d entries: "+
+					"a run never writes into another run's results, so give "+
+					"this run a directory of its own", outputRoot, len(entries))
+		}
+	}
+
+	workspace := &Workspace{
+		OutputRoot:  outputRoot,
+		RunID:       runID,
+		Dir:         outputRoot,
+		WorkingRoot: outputRoot,
+	}
+	if workingRoot != "" {
+		workspace.WorkingRoot = filepath.Join(workingRoot, runID)
+		if taken, err := claim(workspace.WorkingRoot); err != nil {
+			return nil, err
+		} else if taken {
+			return nil, fmt.Errorf(
+				"scratch directory %s already exists", workspace.WorkingRoot)
+		}
+	}
+	workspace.tempDir = filepath.Join(workspace.WorkingRoot, "working")
+
+	if err := os.MkdirAll(workspace.tempDir, 0o755); err != nil {
+		return nil, fmt.Errorf(
+			"create working area %s: %w", workspace.tempDir, err)
+	}
+	return workspace, nil
 }
 
 // checkRunID refuses an id that is not one directory name.

@@ -22,7 +22,7 @@ func TestRedirectProcessTempDir(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	workspace, err := New(root, "", "")
+	workspace, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRedirectProcessTempDir(t *testing.T) {
 
 func TestNewCreatesRunScopedDirectory(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "", "")
+	workspace, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestNewCreatesRunScopedDirectory(t *testing.T) {
 
 func TestStageCopiesFileIntoWorkspace(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "", "")
+	workspace, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestStageCopiesFileIntoWorkspace(t *testing.T) {
 // the parameter after the byproduct rather than after what the analyst chose.
 func TestTheRunDirectoryHoldsTheResultsAndScratchSitsUnderIt(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "", "")
+	workspace, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestTheRunDirectoryHoldsTheResultsAndScratchSitsUnderIt(t *testing.T) {
 // while it was still reading them.
 func TestASeparateScratchRootIsStillScopedByRun(t *testing.T) {
 	output, scratch := t.TempDir(), t.TempDir()
-	workspace, err := New(output, scratch, "")
+	workspace, err := New(output, scratch, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestASeparateScratchRootIsStillScopedByRun(t *testing.T) {
 // they were — and because a non-empty scratch tree means a previous run ended
 // early, which is worth saying rather than tidying away.
 func TestScratchIsCountedBeforeItIsDiscardedAndTheOutputSurvives(t *testing.T) {
-	workspace, err := New(t.TempDir(), "", "")
+	workspace, err := New(t.TempDir(), "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestScratchIsCountedBeforeItIsDiscardedAndTheOutputSurvives(t *testing.T) {
 
 func TestManifestRecordsToolRunAndCounts(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := New(root, "", "")
+	workspace, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,11 +303,11 @@ func TestManifestRecordsToolRunAndCounts(t *testing.T) {
 func TestTwoRunsInOneSecondNeverShareADirectory(t *testing.T) {
 	root := t.TempDir()
 
-	first, err := New(root, "", "")
+	first, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	second, err := New(root, "", "")
+	second, err := New(root, "", "", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestTwoRunsInOneSecondNeverShareADirectory(t *testing.T) {
 func TestARunNeverSharesAScratchDirectoryWithAnother(t *testing.T) {
 	output, working := t.TempDir(), t.TempDir()
 
-	first, err := New(output, working, "")
+	first, err := New(output, working, "", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestARunNeverSharesAScratchDirectoryWithAnother(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	second, err := New(output, working, "")
+	second, err := New(output, working, "", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestARunNeverSharesAScratchDirectoryWithAnother(t *testing.T) {
 func TestASuppliedRunIDNamesTheDirectoryExactly(t *testing.T) {
 	root := t.TempDir()
 
-	workspace, err := New(root, "", "ibis-0f2c")
+	workspace, err := New(root, "", "ibis-0f2c", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -409,12 +409,12 @@ func TestASuppliedRunIDNamesTheDirectoryExactly(t *testing.T) {
 func TestASuppliedRunIDIsRefusedRatherThanCountedOnWhenItIsTaken(t *testing.T) {
 	root := t.TempDir()
 
-	first, err := New(root, "", "case-17")
+	first, err := New(root, "", "case-17", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
-	second, err := New(root, "", "case-17")
+	second, err := New(root, "", "case-17", false)
 	if err == nil {
 		t.Fatalf("the second run took %s, which the first run is writing into",
 			second.Dir)
@@ -443,7 +443,7 @@ func TestARunIDThatIsNotADirectoryNameIsRefused(t *testing.T) {
 		`C:\elsewhere`,
 	} {
 		root := t.TempDir()
-		if _, err := New(root, "", id); err == nil {
+		if _, err := New(root, "", id, false); err == nil {
 			t.Errorf("-run-id %q was accepted: it does not name one directory "+
 				"inside the output root", id)
 		}
@@ -462,10 +462,74 @@ func TestASuppliedRunIDMustBeFreeUnderTheScratchRootToo(t *testing.T) {
 		t.Fatalf("stage the collision: %v", err)
 	}
 
-	if _, err := New(output, scratch, "case-17"); err == nil {
+	if _, err := New(output, scratch, "case-17", false); err == nil {
 		t.Fatal("the run took a scratch directory another run holds")
 	}
 	if _, err := os.Stat(filepath.Join(output, "case-17")); !os.IsNotExist(err) {
 		t.Error("the refused run left its output directory behind")
+	}
+}
+
+// A caller that has already made a directory for this run does not want a
+// second one inside it. -in-place writes the results into the output root
+// itself, and the run still takes an id, because the id identifies the run in
+// the manifest and on the report rather than only naming a directory.
+func TestInPlaceWritesIntoTheOutputRootItself(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "job-4821")
+
+	workspace, err := New(root, "", "", true)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if workspace.Dir != root {
+		t.Errorf("Dir = %q, want %q: -in-place makes no run directory",
+			workspace.Dir, root)
+	}
+	if workspace.RunID == "" {
+		t.Error("the run has no id: the manifest and the report identify a run " +
+			"by it whether or not it named a directory")
+	}
+	if _, err := os.Stat(workspace.TempDir()); err != nil {
+		t.Errorf("the working area was not created: %v", err)
+	}
+}
+
+// The promise a run directory makes is that a second run never overwrites a
+// report already cited in a case note, and writing into an occupied directory
+// is that promise broken however the run was asked for. So an output root that
+// already holds anything is refused, and the refusal says how many entries are
+// in the way rather than leaving the caller to look.
+func TestInPlaceRefusesAnOutputRootThatHoldsAnything(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "report.html"),
+		[]byte("an earlier run"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := New(root, "", "", true); err == nil {
+		t.Fatal("the run wrote into a directory holding an earlier run's results")
+	}
+}
+
+// An empty directory is not an occupied one, and a caller making a directory
+// per run hands over exactly that. Separated from the case above because the
+// two are one condition read in opposite directions, and a check that refused
+// both would pass a test written only about the first.
+func TestInPlaceAcceptsAnEmptyOutputRoot(t *testing.T) {
+	root := t.TempDir()
+
+	if _, err := New(root, "", "", true); err != nil {
+		t.Fatalf("an empty output root was refused: %v", err)
+	}
+}
+
+// The two flags contradict each other: -run-id names a directory to make
+// beneath the output root and -in-place says to make none. Refused by name
+// rather than one silently winning, because which one won would be something a
+// caller had to discover by looking at a disk.
+func TestARunIDAndInPlaceTogetherAreRefused(t *testing.T) {
+	if _, err := New(t.TempDir(), "", "case-17", true); err == nil {
+		t.Fatal("a run took both -run-id and -in-place")
 	}
 }

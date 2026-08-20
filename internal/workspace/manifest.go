@@ -199,7 +199,7 @@ type Counts struct {
 // on every report, so a report produced months ago can be tied to the build
 // that produced it. Bump it in the same commit as the change it describes,
 // or the two disagree and the manifest is the one that gets believed.
-var Version = "0.6.2"
+var Version = "0.6.3"
 
 // BuildHash is the commit the binary was built from. Set at build time.
 var BuildHash = ""

@@ -62,6 +62,10 @@ type options struct {
 	// it starts the run, and it cannot work that out from a stamp taken
 	// inside the process.
 	runID string
+	// inPlace writes the results into the output root itself. For a caller that
+	// has already made a directory for this run and does not want a second one
+	// inside it.
+	inPlace bool
 	// workingRoot puts scratch somewhere other than inside the output. Worth
 	// setting when the output is on a network share and copying a hive across
 	// it would dominate the run.
@@ -108,6 +112,9 @@ func parseFlags() options {
 		"name the run directory beneath the output root instead of taking a "+
 			"UTC timestamp; for a calling tool that has to know the path "+
 			"before the run starts. An existing directory is refused")
+	flag.BoolVar(&opts.inPlace, "in-place", false,
+		"write the results into the output root itself, with no run directory "+
+			"beneath it. Refused if that directory already holds anything")
 	flag.StringVar(&opts.workingRoot, "working", "",
 		"scratch root for recovered hives and staged copies; defaults to "+
 			"inside the run's output directory")
@@ -284,7 +291,7 @@ func run(opts options) error {
 	defer pr.Close()
 
 	// ---- workspace ----------------------------------------------------
-	work, err := workspace.New(opts.outputRoot, opts.workingRoot, opts.runID)
+	work, err := workspace.New(opts.outputRoot, opts.workingRoot, opts.runID, opts.inPlace)
 	if err != nil {
 		return err
 	}
