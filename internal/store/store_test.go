@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,9 +21,70 @@ import (
 	"github.com/Bloggzy/boobook/internal/wintime"
 )
 
+// prepared holds a case database that has been built once, as bytes, so that
+// every test after the first can have one by copying rather than by creating.
+//
+// Creating the views is the whole cost of opening a store: the connection is a
+// millisecond and the tables are eight, and views.sql takes three and a half
+// seconds because DuckDB checks all 84 of them. Paid once per test across the
+// 92 in this file it is about five minutes of setup before any test does any
+// work, which is what put this package past Go's ten-minute timeout. Copying
+// the finished file instead costs 0.19s, and the database a test gets is the
+// same one, made the same way, by the same Open.
+//
+// The template is a variable rather than a file on disk kept between runs. A
+// cached one would be a copy of views.sql that nothing updates, and a test
+// suite silently checking last week's views is worse than a slow one.
+var prepared struct {
+	once  sync.Once
+	bytes []byte
+	err   error
+}
+
+func template() ([]byte, error) {
+	prepared.once.Do(func() {
+		dir, err := os.MkdirTemp("", "boobook-template")
+		if err != nil {
+			prepared.err = err
+			return
+		}
+		defer os.RemoveAll(dir)
+
+		path := filepath.Join(dir, "template.duckdb")
+		store, err := Open(path)
+		if err != nil {
+			prepared.err = err
+			return
+		}
+		// Without this the views are still in the write-ahead log and the copy
+		// is a database that has none of them.
+		if err := store.Checkpoint(); err != nil {
+			store.Close()
+			prepared.err = err
+			return
+		}
+		if err := store.Close(); err != nil {
+			prepared.err = err
+			return
+		}
+		prepared.bytes, prepared.err = os.ReadFile(path)
+	})
+	return prepared.bytes, prepared.err
+}
+
 func open(t *testing.T) *Store {
 	t.Helper()
-	store, err := Open("")
+
+	bytes, err := template()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "case.duckdb")
+	if err := os.WriteFile(path, bytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := OpenExisting(path)
 	if err != nil {
 		t.Fatal(err)
 	}

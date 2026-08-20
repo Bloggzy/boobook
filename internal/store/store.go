@@ -49,6 +49,27 @@ func Open(path string) (*Store, error) {
 	return store, nil
 }
 
+// OpenExisting opens a case database whose schema and views are already in
+// place, without creating either.
+//
+// Open is the way a run makes its database and always creates the views, which
+// is right there and costs about three and a half seconds: DuckDB checks all 84
+// of them, and views.sql is the largest file in the project. That is a price
+// worth paying once per run and not once per caller — a tool reading a finished
+// case.duckdb to query it wants the answers, not the definitions, and so does a
+// test that copies a prepared database rather than building one.
+//
+// Nothing here checks that the file holds what it says it does. A path that is
+// not a case database fails at the first query rather than at the open, which
+// is the same behaviour DuckDB itself has.
+func OpenExisting(path string) (*Store, error) {
+	db, err := sql.Open("duckdb", path)
+	if err != nil {
+		return nil, fmt.Errorf("open duckdb: %w", err)
+	}
+	return &Store{db: db}, nil
+}
+
 // Close releases the handle. It is safe to call twice, because the run closes
 // the database deliberately once everything has been read — so that the file on
 // disk is settled and can be hashed into the manifest — and the deferred close

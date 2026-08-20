@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,17 +23,87 @@ func caseWith(t *testing.T, devnodes []registry.Devnode) *store.Store {
 	return caseLoading(t, devnodes, nil)
 }
 
+// prepared holds a case database that has been built once, as bytes, so that
+// every test after the first can have one by copying rather than by creating.
+//
+// Creating the views is the whole cost of opening a store: three and a half
+// seconds, because DuckDB checks all 84 of them and views.sql is the largest
+// file in the project. Paid once per test across the 44 in this file it is
+// about two and a half minutes of setup before any test does any work. Copying
+// the finished file instead costs 0.19s, and the database a test gets is the
+// same one, made the same way, by the same store.Open. The store package holds
+// the same helper, and the duplication is deliberate: a shared one would have
+// to live in a package that imports store, which store's own internal test
+// cannot import back.
+//
+// The template is a variable rather than a file on disk kept between runs. A
+// cached one would be a copy of views.sql that nothing updates, and a test
+// suite silently checking last week's views is worse than a slow one.
+var prepared struct {
+	once  sync.Once
+	bytes []byte
+	err   error
+}
+
+func preparedCase() ([]byte, error) {
+	prepared.once.Do(func() {
+		dir, err := os.MkdirTemp("", "boobook-template")
+		if err != nil {
+			prepared.err = err
+			return
+		}
+		defer os.RemoveAll(dir)
+
+		path := filepath.Join(dir, "template.duckdb")
+		db, err := store.Open(path)
+		if err != nil {
+			prepared.err = err
+			return
+		}
+		// Without this the views are still in the write-ahead log and the copy
+		// is a database that has none of them.
+		if err := db.Checkpoint(); err != nil {
+			db.Close()
+			prepared.err = err
+			return
+		}
+		if err := db.Close(); err != nil {
+			prepared.err = err
+			return
+		}
+		prepared.bytes, prepared.err = os.ReadFile(path)
+	})
+	return prepared.bytes, prepared.err
+}
+
+// openCase gives a test its own copy of the prepared database.
+func openCase(t *testing.T) *store.Store {
+	t.Helper()
+
+	bytes, err := preparedCase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "case.duckdb")
+	if err := os.WriteFile(path, bytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := store.OpenExisting(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
 // caseLoading builds a case and lets a test add whatever else it needs, against
 // the same hashed source, before the consolidation runs.
 func caseLoading(t *testing.T, devnodes []registry.Devnode,
 	extra func(db *store.Store, sourceID string)) *store.Store {
 	t.Helper()
 
-	db, err := store.Open("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db := openCase(t)
 
 	rules, err := classify.Load()
 	if err != nil {

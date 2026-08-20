@@ -83,6 +83,12 @@ jobs:
       # died at exactly 10m0s with a test that had been running for nine
       # seconds, which is the signature of the package clock rather than a hang.
       #
+      # Each test now takes a copy of one prepared database rather than creating
+      # the 84 views itself, which took store from 574 s to 337 s locally and
+      # report from 485 s to 469 s. The bound is left at twenty minutes: the
+      # saving is in setup, a report test is still about ten seconds of real
+      # query and render work, and a slow runner still doubles all of it.
+      #
       # Twenty minutes is about twice the slowest observed store run. The job
       # timeout below is the real backstop; this bound exists so that a genuine
       # hang still fails in a readable way rather than sitting until the job is
